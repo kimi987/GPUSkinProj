@@ -145,6 +145,15 @@ namespace Fyc.AnimationInstancing
         private MotionData[] _motionDataReadbackCache;
         private int _motionDataReadbackFrame = -1;
         private bool _motionDataReadbackValid;
+        private MotionData[] _motionDataWriteCache;
+        private int _motionDataWriteCacheFrame = -1;
+        private bool _hasPendingMotionWrite;
+        private FrameData[] _frameDataReadbackCache;
+        private int _frameDataReadbackFrame = -1;
+        private bool _frameDataReadbackValid;
+        private FrameData[] _frameDataWriteCache;
+        private int _frameDataWriteCacheFrame = -1;
+        private bool _hasPendingFrameWrite;
 
         private FrameData[] _tempFrameDataAry;  //用于读取和设置Buffer
         private MotionData[] _tempMotionDataAry;
@@ -191,6 +200,9 @@ namespace Fyc.AnimationInstancing
             _avaFramesBuffer = new ComputeBuffer(defaultNum, Marshal.SizeOf<DrawFrameData>(), ComputeBufferType.Append);
             _motionDataBuffer = new ComputeBuffer(defaultNum, Marshal.SizeOf<MotionData>());
             _motionDataReadbackCache = new MotionData[defaultNum];
+            _motionDataWriteCache = new MotionData[defaultNum];
+            _frameDataReadbackCache = new FrameData[defaultNum];
+            _frameDataWriteCache = new FrameData[defaultNum];
 
             DrawMaterial.SetBuffer(ComputeShaderIds.AvaBufferName, _avaFramesBuffer);
             
@@ -264,8 +276,12 @@ namespace Fyc.AnimationInstancing
                 case AnimationDrawType.Instance:
                     return TotalFrames[index];
                 case AnimationDrawType.Buff:
-                    _totalFramesBuffer.GetData(_tempFrameDataAry, 0, index, 1);
-                    return _tempFrameDataAry[0];
+                    if (index >= InstancingCount)
+                        return default;
+                    if (_hasPendingFrameWrite || _frameDataWriteCacheFrame == Time.frameCount)
+                        return _frameDataWriteCache[index];
+                    EnsureFrameDataReadback();
+                    return _frameDataReadbackCache[index];
                 default:
                     throw new ArgumentOutOfRangeException();
             }
@@ -279,8 +295,9 @@ namespace Fyc.AnimationInstancing
                     TotalFrames[index] = frameData;
                     break;
                 case AnimationDrawType.Buff:
-                    _tempFrameDataAry[0] = frameData;
-                    _totalFramesBuffer.SetData(_tempFrameDataAry, 0, index, 1);
+                    EnsureFrameDataWriteCache();
+                    _frameDataWriteCache[index] = frameData;
+                    _hasPendingFrameWrite = true;
                     break;
                 default:
                     throw new ArgumentOutOfRangeException();
@@ -294,8 +311,12 @@ namespace Fyc.AnimationInstancing
                 case AnimationDrawType.Instance:
                     return MotionDataAry[index];
                 case AnimationDrawType.Buff:
-                    _motionDataBuffer.GetData(_tempMotionDataAry, 0, index, 1);
-                    return _tempMotionDataAry[0];
+                    if (index >= InstancingCount)
+                        return default;
+                    if (_hasPendingMotionWrite || _motionDataWriteCacheFrame == Time.frameCount)
+                        return _motionDataWriteCache[index];
+                    EnsureMotionDataReadback();
+                    return _motionDataReadbackCache[index];
                 default:
                     throw new ArgumentOutOfRangeException();
             }
@@ -305,6 +326,12 @@ namespace Fyc.AnimationInstancing
         {
             _motionDataReadbackValid = false;
             _motionDataReadbackFrame = -1;
+        }
+
+        private void InvalidateFrameDataReadback()
+        {
+            _frameDataReadbackValid = false;
+            _frameDataReadbackFrame = -1;
         }
 
         private void EnsureMotionDataReadback()
@@ -323,6 +350,70 @@ namespace Fyc.AnimationInstancing
             _motionDataReadbackFrame = Time.frameCount;
         }
 
+        private void EnsureFrameDataReadback()
+        {
+            if (_drawType != AnimationDrawType.Buff)
+                return;
+            if (_frameDataReadbackCache == null)
+                _frameDataReadbackCache = new FrameData[MaxCount];
+            if (_frameDataReadbackValid && _frameDataReadbackFrame == Time.frameCount)
+                return;
+
+            if (InstancingCount > 0)
+                _totalFramesBuffer.GetData(_frameDataReadbackCache, 0, 0, InstancingCount);
+
+            _frameDataReadbackValid = true;
+            _frameDataReadbackFrame = Time.frameCount;
+        }
+
+        private void EnsureMotionDataWriteCache()
+        {
+            if (_drawType != AnimationDrawType.Buff)
+                return;
+            if (_hasPendingMotionWrite)
+                return;
+            if (_motionDataWriteCacheFrame == Time.frameCount)
+                return;
+
+            EnsureMotionDataReadback();
+            Array.Copy(_motionDataReadbackCache, _motionDataWriteCache, InstancingCount);
+            _motionDataWriteCacheFrame = Time.frameCount;
+        }
+
+        private void EnsureFrameDataWriteCache()
+        {
+            if (_drawType != AnimationDrawType.Buff)
+                return;
+            if (_hasPendingFrameWrite)
+                return;
+            if (_frameDataWriteCacheFrame == Time.frameCount)
+                return;
+
+            EnsureFrameDataReadback();
+            Array.Copy(_frameDataReadbackCache, _frameDataWriteCache, InstancingCount);
+            _frameDataWriteCacheFrame = Time.frameCount;
+        }
+
+        private void FlushPendingBufferWrites()
+        {
+            if (_drawType != AnimationDrawType.Buff)
+                return;
+
+            if (_hasPendingFrameWrite && InstancingCount > 0)
+            {
+                _totalFramesBuffer.SetData(_frameDataWriteCache, 0, 0, InstancingCount);
+                _hasPendingFrameWrite = false;
+                InvalidateFrameDataReadback();
+            }
+
+            if (_hasPendingMotionWrite && InstancingCount > 0)
+            {
+                _motionDataBuffer.SetData(_motionDataWriteCache, 0, 0, InstancingCount);
+                _hasPendingMotionWrite = false;
+                InvalidateMotionDataReadback();
+            }
+        }
+
         private void SetMotionData(int index, MotionData motionData)
         {
             switch (_drawType)
@@ -331,8 +422,9 @@ namespace Fyc.AnimationInstancing
                     MotionDataAry[index] = motionData;
                     break;
                 case AnimationDrawType.Buff:
-                    _tempMotionDataAry[0] = motionData;
-                    _motionDataBuffer.SetData(_tempMotionDataAry, 0, index, 1);
+                    EnsureMotionDataWriteCache();
+                    _motionDataWriteCache[index] = motionData;
+                    _hasPendingMotionWrite = true;
                     InvalidateMotionDataReadback();
                     break;
                 default:
@@ -358,14 +450,13 @@ namespace Fyc.AnimationInstancing
             if (AvaSlots.Count > 0)
             {
                 index = AvaSlots.Pop();
-                _totalFramesBuffer.GetData(_tempFrameDataAry, 0, index, 1);
-                _tempFrameDataAry[0].Active();
-                _totalFramesBuffer.SetData(_tempFrameDataAry, 0, index, 1);
-                
-                _motionDataBuffer.GetData(_tempMotionDataAry, 0, index, 1);
-                _tempMotionDataAry[0].Reset(layerMask);
-                _motionDataBuffer.SetData(_tempMotionDataAry, 0, index, 1);
-                InvalidateMotionDataReadback();
+                var frameData = GetFrameData(index);
+                frameData.Active();
+                SetFrameData(index, frameData);
+
+                var motionData = GetMotionData(index);
+                motionData.Reset(layerMask);
+                SetMotionData(index, motionData);
                 return index;
             }
             if (InstancingCount >= MaxCount)
@@ -373,13 +464,12 @@ namespace Fyc.AnimationInstancing
                 Debug.LogError("Instance Count Beyound Limit Exceeded");
                 return -1;
             }
-            _totalFramesBuffer.GetData(_tempFrameDataAry, 0, InstancingCount, 1);
-            _tempFrameDataAry[0].Active();
-            _totalFramesBuffer.SetData(_tempFrameDataAry, 0, InstancingCount, 1);
-            _motionDataBuffer.GetData(_tempMotionDataAry, 0, InstancingCount, 1);
-            _tempMotionDataAry[0].Reset(layerMask);
-            _motionDataBuffer.SetData(_tempMotionDataAry, 0, InstancingCount, 1);
-            InvalidateMotionDataReadback();
+            var initFrameData = GetFrameData(InstancingCount);
+            initFrameData.Active();
+            SetFrameData(InstancingCount, initFrameData);
+            var initMotionData = GetMotionData(InstancingCount);
+            initMotionData.Reset(layerMask);
+            SetMotionData(InstancingCount, initMotionData);
             
             index = InstancingCount;
             InstancingCount++;
@@ -447,18 +537,17 @@ namespace Fyc.AnimationInstancing
 
         public void RemoveInstanceBuffer(int index)
         {
-            _totalFramesBuffer.GetData(_tempFrameDataAry, 0, index, 1);
-            _tempFrameDataAry[0].Enable = 0;
-            _totalFramesBuffer.SetData(_tempFrameDataAry, 0, index, 1);
+            var frameData = GetFrameData(index);
+            frameData.Enable = 0;
+            SetFrameData(index, frameData);
             AvaSlots.Push(index);
             
             //remove path
-            _motionDataBuffer.GetData(_tempMotionDataAry, 0, index, 1);
-            _tempMotionDataAry[0].Enable = 0; //Disable
-            _motionDataBuffer.SetData(_tempMotionDataAry, 0, index, 1);
-            InvalidateMotionDataReadback();
-            if (_tempMotionDataAry[0].PathIndex >= 0)
-                PathData.Instance.RemovePos(_tempMotionDataAry[0].PathIndex);
+            var motionData = GetMotionData(index);
+            motionData.Enable = 0; //Disable
+            SetMotionData(index, motionData);
+            if (motionData.PathIndex >= 0)
+                PathData.Instance.RemovePos(motionData.PathIndex);
         }
 
         public void RemoveInstanceData(int index)
@@ -519,29 +608,27 @@ namespace Fyc.AnimationInstancing
                     MotionDataAry[index] = data;
                     break;
                 case AnimationDrawType.Buff:
-                    _motionDataBuffer.GetData(_tempMotionDataAry, 0, index, 1);
-                    
-                    if (_tempMotionDataAry[0].PathIndex >= 0)
-                        PathData.Instance.RemovePos(_tempMotionDataAry[0].PathIndex);
-                    targetPos.y = _tempMotionDataAry[0].Position.y;
-                    _tempMotionDataAry[0].PathIndex = -1;
-                    _tempMotionDataAry[0].CurPathIndex = 0;
-                    _tempMotionDataAry[0].TargetPos = targetPos;
-                    _tempMotionDataAry[0].MoveSpeed = moveSpeed;
-  
-                    moveVec = targetPos - _tempMotionDataAry[0].Position;
-                    _tempMotionDataAry[0].MoveDirection = math.normalize(moveVec);
+                    var buffData = GetMotionData(index);
+                    if (buffData.PathIndex >= 0)
+                        PathData.Instance.RemovePos(buffData.PathIndex);
+                    targetPos.y = buffData.Position.y;
+                    buffData.PathIndex = -1;
+                    buffData.CurPathIndex = 0;
+                    buffData.TargetPos = targetPos;
+                    buffData.MoveSpeed = moveSpeed;
+
+                    moveVec = targetPos - buffData.Position;
+                    buffData.MoveDirection = math.normalize(moveVec);
                     
                     if (changeRot)
                     {
-                        _tempMotionDataAry[0].RotateYSpeed = rotateSpeed;
-                        _tempMotionDataAry[0].RotateYSpeedSetting = rotateSpeed;
-                        _tempMotionDataAry[0].RotateYTarget = Utils.DirectionToEulerAngles(moveVec).y;
-                        _tempMotionDataAry[0].RotateYFinal = finalYaw;
+                        buffData.RotateYSpeed = rotateSpeed;
+                        buffData.RotateYSpeedSetting = rotateSpeed;
+                        buffData.RotateYTarget = Utils.DirectionToEulerAngles(moveVec).y;
+                        buffData.RotateYFinal = finalYaw;
                     }
-            
-                    _motionDataBuffer.SetData(_tempMotionDataAry, 0, index, 1);
-                    InvalidateMotionDataReadback();
+
+                    SetMotionData(index, buffData);
                     break;
                 default:
                     throw new ArgumentOutOfRangeException();
@@ -581,29 +668,27 @@ namespace Fyc.AnimationInstancing
                     MotionDataAry[index] = data;
                     break;
                 case AnimationDrawType.Buff:
-                    _motionDataBuffer.GetData(_tempMotionDataAry, 0, index, 1);
-                    if (_tempMotionDataAry[0].PathIndex >= 0)
-                        PathData.Instance.RemovePos(_tempMotionDataAry[0].PathIndex);
+                    var buffData = GetMotionData(index);
+                    if (buffData.PathIndex >= 0)
+                        PathData.Instance.RemovePos(buffData.PathIndex);
                     pathIndex = PathData.Instance.AddBufferPoses(targetPos);
                     if (pathIndex < 0)
                     {
-                        _tempMotionDataAry[0].StopMove();
-                        _motionDataBuffer.SetData(_tempMotionDataAry, 0, index, 1);
-                        InvalidateMotionDataReadback();
+                        buffData.StopMove();
+                        SetMotionData(index, buffData);
                         break;
                     }
-                    _tempMotionDataAry[0].PathIndex = pathIndex + targetPos.Length - 1;
-                    _tempMotionDataAry[0].CurPathIndex = pathIndex;
-                    _tempMotionDataAry[0].MoveSpeed = moveSpeed;
-                    _tempMotionDataAry[0].RotateYSpeed = rotateSpeed;
-                    _tempMotionDataAry[0].RotateYSpeedSetting = rotateSpeed;
-                    firstPos.y = _tempMotionDataAry[0].Position.y;
-                    moveVec = firstPos - (Vector3)_tempMotionDataAry[0].Position;
-                    _tempMotionDataAry[0].MoveDirection = math.normalize(moveVec);
-                    _tempMotionDataAry[0].RotateYTarget = Utils.DirectionToEulerAngles(moveVec).y;
-                    _tempMotionDataAry[0].RotateYFinal = finalYaw;
-                    _motionDataBuffer.SetData(_tempMotionDataAry, 0, index, 1);
-                    InvalidateMotionDataReadback();
+                    buffData.PathIndex = pathIndex + targetPos.Length - 1;
+                    buffData.CurPathIndex = pathIndex;
+                    buffData.MoveSpeed = moveSpeed;
+                    buffData.RotateYSpeed = rotateSpeed;
+                    buffData.RotateYSpeedSetting = rotateSpeed;
+                    firstPos.y = buffData.Position.y;
+                    moveVec = firstPos - (Vector3)buffData.Position;
+                    buffData.MoveDirection = math.normalize(moveVec);
+                    buffData.RotateYTarget = Utils.DirectionToEulerAngles(moveVec).y;
+                    buffData.RotateYFinal = finalYaw;
+                    SetMotionData(index, buffData);
                     
                     break;
                 default:
@@ -671,12 +756,6 @@ namespace Fyc.AnimationInstancing
 
         public bool GetPosition(int index, out float3 pos)
         {
-            if (_drawType == AnimationDrawType.Buff)
-            {
-                EnsureMotionDataReadback();
-                pos = _motionDataReadbackCache[index].Position;
-                return true;
-            }
             pos = GetMotionData(index).Position;
             return true;
         }
@@ -691,11 +770,6 @@ namespace Fyc.AnimationInstancing
 
         public float GetRotationY(int index)
         {
-            if (_drawType == AnimationDrawType.Buff)
-            {
-                EnsureMotionDataReadback();
-                return _motionDataReadbackCache[index].Rotation.y;
-            }
             return GetMotionData(index).Rotation.y;
         }
         
@@ -780,6 +854,7 @@ namespace Fyc.AnimationInstancing
         
         public void DoComputeCullingAndAnimation()
         {
+            FlushPendingBufferWrites();
             _animationDrawShader.SetBuffer(_cullingAndAnimationKernel, ComputeShaderIds.AniInfoBufferName, _aniInfoBuffer);
             _animationDrawShader.SetBuffer(_cullingAndAnimationKernel, ComputeShaderIds.TotalBufferName, _totalFramesBuffer);
             _animationDrawShader.SetBuffer(_cullingAndAnimationKernel, ComputeShaderIds.AvaBufferName, _avaFramesBuffer);
@@ -791,6 +866,7 @@ namespace Fyc.AnimationInstancing
             // Debug.LogError("1111111111_tempFrameDataAry[0].rotation = " + _tempFrameDataAry[0].Rotation + " _" + _tempMotionDataAry[0].RotateYSpeed + "_" + _tempMotionDataAry[0].RotateYSpeedSetting);
             _animationDrawShader.Dispatch(_cullingAndAnimationKernel, Mathf.CeilToInt(InstancingCount / 64f), 1, 1);
             InvalidateMotionDataReadback();
+            InvalidateFrameDataReadback();
             ComputeBuffer.CopyCount(_avaFramesBuffer, _argsBuffer, 4);
             
             //Debug
@@ -844,9 +920,8 @@ namespace Fyc.AnimationInstancing
         private bool PlayAnimationBuffer(int index, string animationName, float startFrame = 0f,
             float transitionTime = 0.25f, bool resetToLast = false)
         {
-            _totalFramesBuffer.GetData(_tempFrameDataAry, 0, index, 1);
-
-            if (_tempFrameDataAry[0].Enable == 0)
+            var data = GetFrameData(index);
+            if (data.Enable == 0)
                 return false;
             startFrame -= 1;
             if (TryGetAnimationIndex(animationName, out var infoIndex))
@@ -855,18 +930,18 @@ namespace Fyc.AnimationInstancing
                 startFrame %= animationSaveData.totalFrame;
                 if (transitionTime > 0)
                 {
-                    _tempFrameDataAry[0].PreAniIndex = _tempFrameDataAry[0].CurAniIndex;
-                    _tempFrameDataAry[0].PreFrameIndex = Mathf.Floor(_tempFrameDataAry[0].FrameIndex + 0.5f);
-                    _tempFrameDataAry[0].TransitionProgress = 0;
+                    data.PreAniIndex = data.CurAniIndex;
+                    data.PreFrameIndex = Mathf.Floor(data.FrameIndex + 0.5f);
+                    data.TransitionProgress = 0;
                 }
 
                 if (resetToLast)
-                    _tempFrameDataAry[0].ResetAniIndex = _tempFrameDataAry[0].CurAniIndex;
+                    data.ResetAniIndex = data.CurAniIndex;
                 
-                _tempFrameDataAry[0].CurAniIndex = infoIndex;
-                _tempFrameDataAry[0].FrameIndex = startFrame + animationSaveData.animationIndex;
-                _tempFrameDataAry[0].TransitionDuration = transitionTime;
-                _totalFramesBuffer.SetData(_tempFrameDataAry, 0, index, 1);
+                data.CurAniIndex = infoIndex;
+                data.FrameIndex = startFrame + animationSaveData.animationIndex;
+                data.TransitionDuration = transitionTime;
+                SetFrameData(index, data);
                 
                 return true;
             }
