@@ -1,0 +1,62 @@
+#pragma kernel CSTest
+#pragma kernel CSTestPositon
+#pragma kernel CSTestPosRotToMatrix
+#pragma kernel CSLoadTexture
+
+#include "ShaderLibs/UnPacked.hlsl"
+#include "ShaderLibs/Matrix.hlsl"
+
+float _PackVal;
+float4 _PackColor;
+int texSize;
+
+float4 _InPos;
+float4 _InQuan;
+
+RWStructuredBuffer<float4> _Result;
+RWStructuredBuffer<float4x4> _MatrixResult;
+
+// 定义只读纹理
+Texture2D<float4> InputTexture;
+
+[numthreads(1, 1, 1)]
+void CSTest(uint3 id : SV_DispatchThreadID)
+{
+    float3 val = unpack111110(_PackVal);
+    _Result[0] = float4(val, 0);
+}
+
+[numthreads(1, 1, 1)]
+void CSTestPositon(uint3 id : SV_DispatchThreadID)
+{
+    float2 r1 = unpack1616(_PackColor.r);
+    float2 r2 = unpack1616(_PackColor.g);
+    float2 r3 = unpack1616(_PackColor.b);
+    float2 r4 = unpack1616(_PackColor.a);
+
+    float4x4 m = ReconstructMatrixNoScale(float3(r1.x, r2.x, r3.x), float4(r1.y, r2.y, r3.y, r4.x));
+    _MatrixResult[0] = m;
+
+    _Result[0] = float4(r1.x, r2.x, r3.x, 0);
+    _Result[1] = float4(r1.y, r2.y, r3.y, r4.x);
+}
+
+[numthreads(1, 1, 1)]
+void CSTestPosRotToMatrix(uint3 id : SV_DispatchThreadID)
+{
+    float4x4 m = ReconstructMatrixNoScale(_InPos, _InQuan);
+    _MatrixResult[0] = m;
+}
+
+[numthreads(8, 8, 1)]
+void CSLoadTexture(uint3 id : SV_DispatchThreadID)
+{
+    float4 color = InputTexture[id.xy];
+    float2 r1 = unpack1616(color.r);
+    float2 r2 = unpack1616(color.g);
+    float2 r3 = unpack1616(color.b);
+    float2 r4 = unpack1616(color.a);
+
+    _Result[id.x + id.y * texSize] = float4(color.x, color.y, color.z, color.w);
+    _MatrixResult[id.x + id.y * texSize] = ReconstructMatrixNoScale(float3(r1.x, r2.x, r3.x), float4(r1.y, r2.y, r3.y, r4.x));
+}

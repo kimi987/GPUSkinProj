@@ -1,0 +1,334 @@
+// #pragma kernel CSCulling
+#pragma kernel CSCullingAndAnimation
+
+#include "ShaderLibs/Matrix.hlsl"
+
+#define PositiveInfinity 1.0f / 0.0f;
+
+struct AnimationSaveData
+{
+    int AnimationNameHash;
+    int AnimationIndex;
+    int AnimationTexIndex;
+    int TotalFrame;
+    int Fps;
+    bool RootMotion;
+    int WrapMode;
+};
+
+struct FrameData
+{
+    int Enable;
+    int Pause;
+    float AniSpeed;
+    int PreAniIndex;
+    int CurAniIndex;
+    float FrameIndex;
+    float PreFrameIndex;
+    float TransitionProgress;
+    float TransitionDuration;
+    int ResetAniIndex;
+};
+
+struct MotionData
+{
+    int enable;
+    int Visible;
+    int IsCull;
+    uint LayerMask;
+    int ParentIndex;
+    float3 Position;
+    float3 Rotation;
+    float Scale;
+    float MoveSpeed;
+    float3 MoveDirection;
+    float3 TargetPos;
+    float RotateYSpeedSetting;
+    float RotateYSpeed;
+    float RotateYTarget;
+    float RotateYFinal;
+    int CurPathIndex;
+    int PathIndex;
+
+    // float DebugFinalY;
+};
+
+struct DrawFrameData
+{
+    float4x4 WorldMatrix;
+    float FrameIndex;
+    float PreFrameIndex;
+    float TransitionProgress;
+    float Padding;
+};
+
+StructuredBuffer<AnimationSaveData> _InfoData;
+RWStructuredBuffer<FrameData>  _FrameData;
+RWStructuredBuffer<MotionData> _MotionData;
+StructuredBuffer<MotionData> _ParentMotionData;
+StructuredBuffer<float3> _PathAry;
+
+AppendStructuredBuffer<FrameData> _OutFrameData;
+AppendStructuredBuffer<DrawFrameData> _OutDrawFrameData;
+float4 _Planes[6]; //Camera Planes
+float _DeltaTime;
+uint _LayerMask;
+int _CullingType;
+
+//TODO Calculate Move Or Rotation
+// [numthreads(64, 1, 1)] 
+// void CSCulling(uint3 id : SV_DispatchThreadID)
+// {
+//     uint index = id.x;
+//     FrameData data = _FrameData[index];
+//     if (data.Enable == 0)
+//         return;
+//     
+//     // radius 1
+//     bool visible = true;
+//
+//     for (uint i = 0; i < 6; i++)
+//     {
+//         if (dot(_Planes[i].xyz, data.Position) + _Planes[i].w < - 1.0)
+//         {
+//             visible = false;
+//             break;
+//         }
+//     }
+//     if (visible)
+//     {
+//         _OutFrameData.Append(data);
+//     }
+// }
+
+
+[numthreads(64, 1, 1)]
+void CSCullingAndAnimation(uint3 id : SV_DispatchThreadID)
+{
+    uint index = id.x;
+    
+    //Do Motion
+    //Move or Rotation
+    MotionData motion = _MotionData[index];
+
+    if (motion.enable == 0)
+        return;
+    
+    if (motion.MoveSpeed > 0.01)
+    {
+        float3 targetPos = motion.TargetPos;
+        if (motion.PathIndex >= 0)
+            targetPos = _PathAry[motion.CurPathIndex];
+        targetPos.y = motion.Position.y;
+        float step = _DeltaTime * motion.MoveSpeed;
+        float distance = length(targetPos - motion.Position);
+
+        if (step >= distance)
+        {
+            if (motion.PathIndex >= 0)
+            {
+                if (motion.CurPathIndex >= motion.PathIndex)
+                {
+                    //Done Finish Move
+                    motion.Position = targetPos;
+                    motion.MoveSpeed = 0;
+                }
+                else
+                {
+                    float remainStep = step - distance;
+                    motion.CurPathIndex += 1;
+                    float3 newPos = _PathAry[motion.CurPathIndex];
+                    motion.MoveSpeed = newPos.y;
+                    newPos.y = motion.Position.y;
+                    motion.MoveDirection = normalize(newPos - targetPos);
+                    motion.Position = targetPos + motion.MoveDirection * remainStep;
+                    if (motion.RotateYSpeedSetting > 0.01)
+                    {
+                        motion.RotateYSpeed = motion.RotateYSpeedSetting;
+                        motion.RotateYTarget = GetYRotation(motion.MoveDirection);
+                    }
+                }
+            } else
+            {
+                //Done Finish Move
+                motion.Position = targetPos;
+                motion.MoveSpeed = 0;
+            }
+        }
+        else
+            motion.Position += step * motion.MoveDirection;
+    }
+
+    if (abs(motion.RotateYSpeed) > 0.01)
+    {
+        float targetY = 0;
+        bool useFinal = false;
+        if (isfinite(motion.RotateYTarget))
+            targetY = motion.RotateYTarget;
+        else if (isfinite(motion.RotateYFinal))
+        {
+            targetY = motion.RotateYFinal;
+            useFinal = true;
+        }
+        else
+            motion.RotateYSpeed = 0;
+
+        // motion.DebugTargetY = targetY;
+        if (abs(motion.RotateYSpeed) > 0.01)
+        {
+            float deltaAngle = GetDeltaAngle(motion.Rotation.y, targetY);
+            float step = motion.RotateYSpeed * _DeltaTime;
+            if (step > abs(deltaAngle))
+            {
+                if (useFinal)
+                {
+                    motion.RotateYSpeed = 0;
+                    motion.RotateYFinal = PositiveInfinity;
+                }
+                else
+                    motion.RotateYTarget = PositiveInfinity;
+                motion.Rotation.y = targetY;
+            }
+            else
+                motion.Rotation.y += sign(deltaAngle) * step;
+        }
+    }
+
+    motion.IsCull = 0;
+    _MotionData[index] = motion;
+
+    float3 positon = motion.Position;
+    float3 rotation = motion.Rotation;
+    float scale = motion.Scale;
+
+    if (motion.ParentIndex >= 0)
+    {
+        //has parent
+        MotionData parentMotion = _ParentMotionData[motion.ParentIndex];
+        if ((_LayerMask & parentMotion.LayerMask) == 0 || parentMotion.Visible == 0 || parentMotion.IsCull == 1)
+        {
+            motion.IsCull = 1;
+            _MotionData[index] = motion;
+            return;
+        }
+        parentMotion.Position.y = 0;
+        positon += parentMotion.Position;
+        rotation += parentMotion.Rotation;
+        scale *= parentMotion.Scale;
+        // motion.DebugFinalY = rotation.y;
+        // _MotionData[index] = motion;
+    }
+    
+    if ((_LayerMask & motion.LayerMask) == 0 || motion.Visible == 0)
+    {
+        motion.IsCull = 1;
+        _MotionData[index] = motion;
+        return;
+    }
+    
+    // radius 1
+
+    for (uint i = 0; i < 6; i++)
+    {
+        if (dot(_Planes[i].xyz, positon) + _Planes[i].w < - 1.0)
+        {
+            motion.IsCull = 1;
+            _MotionData[index] = motion;
+            return;
+        }
+    }
+
+    if (_CullingType == 1)
+        //No Animation Changed
+        return;
+
+    FrameData data = _FrameData[index];
+    AnimationSaveData infoData = _InfoData[data.CurAniIndex];
+    DrawFrameData drawData;
+    
+    if (motion.MoveSpeed < 0.001 && abs(motion.RotateYSpeed) < 0.001)
+    {
+        if (data.ResetAniIndex >= 0)
+        {
+            //Stop Move
+            infoData = _InfoData[data.ResetAniIndex];
+            data.CurAniIndex = data.ResetAniIndex;
+            data.FrameIndex = infoData.AnimationIndex;
+            data.TransitionDuration = 0;
+            data.ResetAniIndex = -1;
+            motion.RotateYSpeed = 0;
+            motion.Rotation.y = 0;
+            motion.RotateYTarget = PositiveInfinity;
+            motion.RotateYFinal = PositiveInfinity;
+            _MotionData[index] = motion; 
+        }
+    }
+    
+    drawData.WorldMatrix = CreateTRSMatrix(positon, rotation, scale);
+
+    if (data.Pause == 1)
+    {
+        drawData.FrameIndex = data.FrameIndex;
+        drawData.PreFrameIndex = data.PreFrameIndex;
+        drawData.TransitionProgress = data.TransitionProgress;
+        drawData.Padding = 0;
+        _OutDrawFrameData.Append(drawData);
+        return;
+    }
+
+
+    float framePercent = _DeltaTime * infoData.Fps * data.AniSpeed;
+    data.FrameIndex += framePercent;
+    float totalFrame = infoData.TotalFrame - 1;
+    float endFrame = totalFrame + infoData.AnimationIndex;
+
+    if (data.FrameIndex > endFrame)
+    {
+        if (infoData.WrapMode == 2) //Loop
+            data.FrameIndex -= totalFrame;
+        else
+        {
+            //to Idle
+            AnimationSaveData firstInfo = _InfoData[0];
+            data.CurAniIndex = 0;
+            data.FrameIndex = firstInfo.AnimationIndex;
+        }
+    }
+
+    //Transition
+    if (data.PreAniIndex >= 0)
+    {
+        AnimationSaveData preInfo = _InfoData[data.PreAniIndex];
+        data.PreFrameIndex += framePercent;
+        totalFrame = preInfo.TotalFrame - 1;
+        endFrame = totalFrame + preInfo.AnimationIndex;
+
+        if (data.PreFrameIndex > endFrame)
+        {
+            //End
+            data.PreAniIndex = -1;
+            data.TransitionProgress = 1;
+        }
+        else
+        {
+            if (data.TransitionDuration > 0)
+            {
+                float progress = _DeltaTime / data.TransitionDuration;
+                data.TransitionProgress += progress;
+                if (data.TransitionProgress > 1)
+                {
+                    //end
+                    data.PreAniIndex = -1;
+                    data.TransitionProgress = 1;
+                }
+            }
+        }
+    }
+    //Write back
+    _FrameData[index] = data;
+    drawData.FrameIndex = data.FrameIndex;
+    drawData.PreFrameIndex = data.PreFrameIndex;
+    drawData.TransitionProgress = data.TransitionProgress;
+    drawData.Padding = 0;
+    _OutDrawFrameData.Append(drawData);
+}
