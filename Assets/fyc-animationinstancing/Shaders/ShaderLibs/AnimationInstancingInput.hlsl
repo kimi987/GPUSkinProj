@@ -18,12 +18,12 @@ struct VaryingsAnimationInstancing
 {
     float2 uv : TEXCOORD0;
     float4 vertex : SV_POSITION;
-    float3 posW : TEXTCOORD1;
-    real3 normalW : TEXTCOORD2;
-    real4 tangentW : TEXTCOORD3;
-    real3 bitangentWS : TEXTCOORD4;
-    real4 shadowCoord : TEXTCOORD5;
-    real3 vertexSH : TEXTCOORD6;
+    float3 posW : TEXCOORD1;
+    real3 normalW : TEXCOORD2;
+    real4 tangentW : TEXCOORD3;
+    real3 bitangentWS : TEXCOORD4;
+    real4 shadowCoord : TEXCOORD5;
+    real3 vertexSH : TEXCOORD6;
     UNITY_VERTEX_INPUT_INSTANCE_ID
 };
 

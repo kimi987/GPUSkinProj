@@ -30,6 +30,7 @@ namespace Fyc.AnimationInstancing
         public static string PlaneName = "_Planes";
         public static string DeltaTimeName = "_DeltaTime";
         public static string DrawLayerMask = "_LayerMask";
+        public static string InstanceCount = "_InstanceCount";
         
         //parent
         public static string ParentMotionBufferName = "_ParentMotionData";

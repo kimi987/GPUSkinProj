@@ -250,9 +250,10 @@ namespace Fyc.AnimationInstancing
         {
             var index = AddInstance(unitName, layerMask, pos, rotation, scale);
             if (index != -1 && _parentDateDefine != null)
-                _parentDateDefine.SetChild(parentIndex, posId, unitName, parentIndex);
+                _parentDateDefine.SetChild(parentIndex, posId, unitName, index);
 
-            SetInstanceParent(unitName, index, parentIndex);
+            if (index != -1)
+                SetInstanceParent(unitName, index, parentIndex);
             
             return index;
         }
@@ -260,6 +261,8 @@ namespace Fyc.AnimationInstancing
         public void SetInstanceParent(string unitName, int index, int parentIndex)
         {
             var data = GetDrawInstanceData(unitName);
+            if (data == null)
+                return;
             data.SetParent(index, parentIndex);
         }
 
@@ -525,7 +528,8 @@ namespace Fyc.AnimationInstancing
                 _parentDateDefine.Dispose();
             PathData.Instance.Dispose(); //销毁路径数据
             _drawInstanceData = null;
-            _planeNativeArray.Dispose();
+            if (_planeNativeArray.IsCreated)
+                _planeNativeArray.Dispose();
             _init = false;
         }
     }

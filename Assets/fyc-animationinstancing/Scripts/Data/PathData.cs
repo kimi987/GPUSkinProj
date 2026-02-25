@@ -64,6 +64,13 @@ namespace Fyc.AnimationInstancing
 
         public int AddBufferPoses(Vector3[] poses)
         {
+            if (poses == null || poses.Length == 0)
+                return -1;
+            if (poses.Length > NumOfEachUnit)
+            {
+                Debug.LogError($"Path point count {poses.Length} exceeds limit {NumOfEachUnit}.");
+                return -1;
+            }
             var resultIndex = _lastIndex;
             var fromLast = true;
             if (_freeIndexes.Count > 0)
@@ -72,6 +79,11 @@ namespace Fyc.AnimationInstancing
                 resultIndex = _freeIndexes.Dequeue();
             }
             var length = poses.Length;
+            if (resultIndex + length > NumOfAll)
+            {
+                Debug.LogError("Path buffer overflow.");
+                return -1;
+            }
             _pathBuffer.SetData(poses, 0, resultIndex, length);
 
             if (fromLast)
@@ -85,6 +97,13 @@ namespace Fyc.AnimationInstancing
 
         public int AddInstancePoses(Vector3[] poses)
         {
+            if (poses == null || poses.Length == 0)
+                return -1;
+            if (poses.Length > NumOfEachUnit)
+            {
+                Debug.LogError($"Path point count {poses.Length} exceeds limit {NumOfEachUnit}.");
+                return -1;
+            }
             var resultIndex = _lastIndex;
             var fromLast = true;
             if (_freeIndexes.Count > 0)
@@ -93,6 +112,11 @@ namespace Fyc.AnimationInstancing
                 resultIndex = _freeIndexes.Dequeue();
             }
             var length = poses.Length;
+            if (resultIndex + length > NumOfAll)
+            {
+                Debug.LogError("Path array overflow.");
+                return -1;
+            }
 
             for (int i = 0; i < length; i++)
             {
@@ -113,8 +137,11 @@ namespace Fyc.AnimationInstancing
         {
             if (index < 0)
                 return;
-            
-            _freeIndexes.Enqueue(index);
+
+            // Path blocks are allocated in fixed NumOfEachUnit chunks.
+            // Callers may pass either start or end index; normalize to chunk start.
+            var blockStart = index - (index % NumOfEachUnit);
+            _freeIndexes.Enqueue(blockStart);
         }
 
         public void Dispose()

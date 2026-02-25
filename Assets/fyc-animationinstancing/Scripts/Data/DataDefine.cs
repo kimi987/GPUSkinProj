@@ -283,6 +283,11 @@ namespace Fyc.AnimationInstancing
                 _motionDataBuffer.SetData(_tempMotionDataAry, 0, index, 1);
                 return index;
             }
+            if (InstancingCount >= MaxCount)
+            {
+                Debug.LogError("Instance Count Beyound Limit Exceeded");
+                return -1;
+            }
             _totalFramesBuffer.GetData(_tempFrameDataAry, 0, InstancingCount, 1);
             _tempFrameDataAry[0].Active();
             _totalFramesBuffer.SetData(_tempFrameDataAry, 0, InstancingCount, 1);
@@ -489,6 +494,12 @@ namespace Fyc.AnimationInstancing
                         PathData.Instance.RemovePos(data.PathIndex);
                     
                     var pathIndex = PathData.Instance.AddInstancePoses(targetPos);
+                    if (pathIndex < 0)
+                    {
+                        data.StopMove();
+                        MotionDataAry[index] = data;
+                        break;
+                    }
                     data.PathIndex = pathIndex + targetPos.Length - 1;
                     data.CurPathIndex = pathIndex;
                     firstPos.y = data.Position.y;
@@ -506,6 +517,12 @@ namespace Fyc.AnimationInstancing
                     if (_tempMotionDataAry[0].PathIndex >= 0)
                         PathData.Instance.RemovePos(_tempMotionDataAry[0].PathIndex);
                     pathIndex = PathData.Instance.AddBufferPoses(targetPos);
+                    if (pathIndex < 0)
+                    {
+                        _tempMotionDataAry[0].StopMove();
+                        _motionDataBuffer.SetData(_tempMotionDataAry, 0, index, 1);
+                        break;
+                    }
                     _tempMotionDataAry[0].PathIndex = pathIndex + targetPos.Length - 1;
                     _tempMotionDataAry[0].CurPathIndex = pathIndex;
                     _tempMotionDataAry[0].MoveSpeed = moveSpeed;
@@ -835,6 +852,7 @@ namespace Fyc.AnimationInstancing
             _animationDrawShader.SetBuffer(_cullingAndAnimationKernel, ComputeShaderIds.AvaBufferName, _avaFramesBuffer);
             _animationDrawShader.SetBuffer(_cullingAndAnimationKernel, ComputeShaderIds.MotionBufferName, _motionDataBuffer);
             _animationDrawShader.SetInt(ComputeShaderIds.CullingType, 0);
+            _animationDrawShader.SetInt(ComputeShaderIds.InstanceCount, InstancingCount);
             _avaFramesBuffer.SetCounterValue(0);
             
             // Debug.LogError("1111111111_tempFrameDataAry[0].rotation = " + _tempFrameDataAry[0].Rotation + " _" + _tempMotionDataAry[0].RotateYSpeed + "_" + _tempMotionDataAry[0].RotateYSpeedSetting);

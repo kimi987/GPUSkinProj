@@ -268,6 +268,7 @@ namespace Fyc.AnimationInstancing
                 
             _animationDrawShader.SetBuffer(_cullingKernel, ComputeShaderIds.MotionBufferName, _motionDataBuffer);
             _animationDrawShader.SetInt(ComputeShaderIds.CullingType, 1);
+            _animationDrawShader.SetInt(ComputeShaderIds.InstanceCount, _curCount);
 
             _animationDrawShader.Dispatch(_cullingKernel, Mathf.CeilToInt(_curCount / 64f), 1, 1);
             
@@ -343,6 +344,12 @@ namespace Fyc.AnimationInstancing
                         PathData.Instance.RemovePos(data.PathIndex);
                     
                     var pathIndex = PathData.Instance.AddInstancePoses(targetPos);
+                    if (pathIndex < 0)
+                    {
+                        data.StopMove();
+                        _motionDataArray[index] = data;
+                        break;
+                    }
                     data.PathIndex = pathIndex + targetPos.Length - 1;
                     data.CurPathIndex = pathIndex;
                     firstPos.y = data.Position.y;
@@ -360,6 +367,12 @@ namespace Fyc.AnimationInstancing
                     if (_tempMotionDataAry[0].PathIndex >= 0)
                         PathData.Instance.RemovePos(_tempMotionDataAry[0].PathIndex);
                     pathIndex = PathData.Instance.AddBufferPoses(targetPos);
+                    if (pathIndex < 0)
+                    {
+                        _tempMotionDataAry[0].StopMove();
+                        _motionDataBuffer.SetData(_tempMotionDataAry, 0, index, 1);
+                        break;
+                    }
                     _tempMotionDataAry[0].PathIndex = pathIndex + targetPos.Length - 1;
                     _tempMotionDataAry[0].CurPathIndex = pathIndex;//+ targetPos.Length - 1;
                     _tempMotionDataAry[0].MoveSpeed = moveSpeed;
