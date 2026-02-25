@@ -123,9 +123,6 @@ namespace Fyc.AnimationInstancing
         private NativeArray<Matrix4x4> WorldMatrix; //绘制的矩阵
         private NativeArray<AnimationSaveData> AniInfoData;
         
-        //Pos Array
-        private NativeArray<float3> MovePosAry;
-        
         //Optimal for GC
         private NativeList<int> VisibleIndices;
         private float[] _frameIndexCache = new float[1023];
@@ -884,6 +881,15 @@ namespace Fyc.AnimationInstancing
 
         #region Animation
 
+        private bool TryGetAnimationIndex(string animationName, out int infoIndex)
+        {
+            infoIndex = -1;
+            if (string.IsNullOrEmpty(animationName))
+                return false;
+
+            return InfoIndexes.TryGetValue(animationName.GetHashCode(), out infoIndex);
+        }
+
         public bool PlayAnimation(int index, string animationName, float startFrame = 0f,
             float transitionTime = 0.25f, bool resetToLast = false)
         {
@@ -906,7 +912,7 @@ namespace Fyc.AnimationInstancing
             if (_tempFrameDataAry[0].Enable == 0)
                 return false;
             startFrame -= 1;
-            if (InfoIndexes.TryGetValue(animationName.GetHashCode(), out var infoIndex))
+            if (TryGetAnimationIndex(animationName, out var infoIndex))
             {
                 var animationSaveData = AniData.GetAnimation(infoIndex);
                 startFrame %= animationSaveData.totalFrame;
@@ -939,7 +945,7 @@ namespace Fyc.AnimationInstancing
                 return false;
 
             startFrame -= 1;
-            if (InfoIndexes.TryGetValue(animationName.GetHashCode(), out var infoIndex))
+            if (TryGetAnimationIndex(animationName, out var infoIndex))
             {
                 // if (infoIndex == data.CurAniIndex)
                 // {
@@ -979,15 +985,6 @@ namespace Fyc.AnimationInstancing
                 return;
             Graphics.DrawMeshInstancedIndirect(DrawMesh, 0, DrawMaterial, DefaultBounds, 
                 _argsBuffer, 0, null, drawShadow, receiveShadow);
-        }
-        
-        private void FillCache(int start, int count)
-        {
-            // NativeArray.GetSubArray 不产生 GC，它只是一个视图
-            FrameIndexes.GetSubArray(start, count).CopyTo(_frameIndexCache);
-            PreFrameIndexes.GetSubArray(start, count).CopyTo(_preFrameIndexCache);
-            TransitionProgress.GetSubArray(start, count).CopyTo(_transitionProgressCache);
-            WorldMatrix.GetSubArray(start, count).CopyTo(_matrixCache);
         }
         
         public void Draw(ShadowCastingMode drawShadow = ShadowCastingMode.On, bool receiveShadow = true, int layer = 0)
