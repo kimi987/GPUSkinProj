@@ -31,7 +31,6 @@ namespace Fyc.AnimationInstancing
         
         private Camera _cullingCamera;
 
-        private string _loadPath;  //加载的前缀
         private int _defaultNum;  //默认容器的大小
         private const int _defaultTypeNum = 128;
 
@@ -62,7 +61,7 @@ namespace Fyc.AnimationInstancing
             _drawInstanceData = new DrawInstancingData[_defaultTypeNum];
             _drawInstanceDataCount = 0;
             _drawInstanceIndexDict = new();
-            _loadPath = loadPath;
+            _ = loadPath;
             _defaultNum = defaultNum;
 
             animationDrawType = AnimationDrawType.Instance;
@@ -291,6 +290,11 @@ namespace Fyc.AnimationInstancing
                     break;
                 default:
                     throw new ArgumentOutOfRangeException();
+            }
+            if (_drawInstanceDataCount >= _drawInstanceData.Length)
+            {
+                Debug.LogError($"AddInstance failed: unit type limit reached ({_drawInstanceData.Length}).");
+                return -1;
             }
             _drawInstanceIndexDict[unitName] = _drawInstanceDataCount;
             _drawInstanceData[_drawInstanceDataCount++] = data;

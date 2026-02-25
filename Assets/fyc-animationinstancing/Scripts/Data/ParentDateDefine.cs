@@ -75,7 +75,7 @@ namespace Fyc.AnimationInstancing
             {
                 if (childDataDic.TryGetValue(posId, out var childData))
                 {
-                    if (childData != null && childData.UnitName != unitName && childData.InstanceIndex != instanceIndex)
+                    if (childData != null && (childData.UnitName != unitName || childData.InstanceIndex != instanceIndex))
                     {
                         AnimationDrawMgr.Instance.RemoveInstance(childData.UnitName, childData.InstanceIndex);
                         childData.UnitName = unitName;
