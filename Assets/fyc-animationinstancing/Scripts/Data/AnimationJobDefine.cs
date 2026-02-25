@@ -1,3 +1,4 @@
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
@@ -5,7 +6,7 @@ using UnityEngine;
 
 namespace Fyc.AnimationInstancing
 {
-    [BurstCompatible]
+    [BurstCompile]
     public struct ParentCullingMotionJob : IJobParallelFor
     {
         private const float Radius = 1;
@@ -58,7 +59,7 @@ namespace Fyc.AnimationInstancing
         }
     }
     
-    [BurstCompatible]
+    [BurstCompile]
     public struct CullingUnitJob : IJobParallelFor
     {
         private const float Radius = 1;
@@ -135,7 +136,7 @@ namespace Fyc.AnimationInstancing
         }
     }
     
-    [BurstCompatible]
+    [BurstCompile]
     public struct AnimationJob : IJobParallelFor
     {
         [ReadOnly]

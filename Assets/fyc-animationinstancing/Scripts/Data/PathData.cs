@@ -64,6 +64,11 @@ namespace Fyc.AnimationInstancing
 
         public int AddBufferPoses(Vector3[] poses)
         {
+            if (poses.Length > NumOfEachUnit)
+            {
+                Debug.LogError($"Path point count {poses.Length} exceeds limit {NumOfEachUnit}.");
+                return -1;
+            }
             var resultIndex = _lastIndex;
             var fromLast = true;
             if (_freeIndexes.Count > 0)
@@ -76,15 +81,24 @@ namespace Fyc.AnimationInstancing
 
             if (fromLast)
             {
-                _lastIndex += NumOfEachUnit;
                 if (NumOfAll - _lastIndex < NumOfEachUnit)
-                    Debug.LogError("当前数组长度已经不足以覆盖路点");
+                {
+                    Debug.LogError("Total path point count exceeds limit.");
+                    return -1;
+                }
+                _lastIndex += NumOfEachUnit;
             }
             return resultIndex;
         }
 
         public int AddInstancePoses(Vector3[] poses)
         {
+            if (poses.Length > NumOfEachUnit)
+            {
+                Debug.LogError($"Path point count {poses.Length} exceeds limit {NumOfEachUnit}.");
+                return -1;
+            }
+            
             var resultIndex = _lastIndex;
             var fromLast = true;
             if (_freeIndexes.Count > 0)
@@ -101,9 +115,12 @@ namespace Fyc.AnimationInstancing
             
             if (fromLast)
             {
-                _lastIndex += NumOfEachUnit;
                 if (NumOfAll - _lastIndex < NumOfEachUnit)
-                    Debug.LogError("当前数组长度已经不足以覆盖路点");
+                {
+                    Debug.LogError("Total path point count exceeds limit.");
+                    return -1;
+                }
+                _lastIndex += NumOfEachUnit;
             }
 
             return resultIndex;

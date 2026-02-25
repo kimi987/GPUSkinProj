@@ -3,7 +3,7 @@
 
 #include "ShaderLibs/Matrix.hlsl"
 
-#define PositiveInfinity 1.0f / 0.0f;
+#define PositiveInfinity (1.0f / 0.0f)
 
 struct AnimationSaveData
 {
@@ -74,6 +74,7 @@ float4 _Planes[6]; //Camera Planes
 float _DeltaTime;
 uint _LayerMask;
 int _CullingType;
+uint _InstanceCount;
 
 //TODO Calculate Move Or Rotation
 // [numthreads(64, 1, 1)] 
@@ -107,6 +108,8 @@ void CSCullingAndAnimation(uint3 id : SV_DispatchThreadID)
 {
     uint index = id.x;
     
+    if (index >= _InstanceCount)
+        return;
     //Do Motion
     //Move or Rotation
     MotionData motion = _MotionData[index];

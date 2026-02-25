@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Sirenix.OdinInspector;
+using Temp;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
@@ -23,7 +24,7 @@ namespace Fyc.AnimationInstancing
         public ComputeShader animationComputeShader;
         public uint currentDrawLayer = 0xFFFFFFFF;
 
-        private ParentDateDefine _parentDateDefine; //for group data
+        private ParentDataDefine _parentDataDefine; //for group data
         private Dictionary<string, int> _drawInstanceIndexDict;
 
         private DrawInstancingData[] _drawInstanceData;
@@ -80,10 +81,10 @@ namespace Fyc.AnimationInstancing
                 switch (animationDrawType)
                 {
                     case AnimationDrawType.Instance:
-                        _parentDateDefine = new ParentDateDefine();
+                        _parentDataDefine = new ParentDataDefine();
                         break;
                     case AnimationDrawType.Buff:
-                        _parentDateDefine = new ParentDateDefine(animationComputeShader);
+                        _parentDataDefine = new ParentDataDefine(animationComputeShader);
                         
                         break;
                     default:
@@ -149,42 +150,42 @@ namespace Fyc.AnimationInstancing
         
         public bool GetParentIsDirty(int parentIndex)
         {
-            if (_parentDateDefine != null)
-                return _parentDateDefine.GetIsDirty(parentIndex);
+            if (_parentDataDefine != null)
+                return _parentDataDefine.GetIsDirty(parentIndex);
             return false;
         }
         
         public float3 GetParentPos(int parentIndex)
         {
-            if (_parentDateDefine != null)
-                return _parentDateDefine.GetPosition(parentIndex);
+            if (_parentDataDefine != null)
+                return _parentDataDefine.GetPosition(parentIndex);
             return float3.zero;
         }
         
         public float GetParentRotY(int parentIndex)
         {
-            if (_parentDateDefine != null)
-                return _parentDateDefine.GetRotationY(parentIndex);
+            if (_parentDataDefine != null)
+                return _parentDataDefine.GetRotationY(parentIndex);
             return 0f;
         }
 
         public void SetParentPos(int parentIndex, float3 pos)
         {
-            if (_parentDateDefine != null)
-                _parentDateDefine.SetPosition(parentIndex, pos);
+            if (_parentDataDefine != null)
+                _parentDataDefine.SetPosition(parentIndex, pos);
         }
 
         public void SetParentRotY(int parentIndex, float rotY)
         {
-            if (_parentDateDefine != null)
-                _parentDateDefine.SetRotationY(parentIndex, rotY);
+            if (_parentDataDefine != null)
+                _parentDataDefine.SetRotationY(parentIndex, rotY);
         }
         
         private NativeArray<MotionData> _default;
         public ref NativeArray<MotionData> GetParentMotionData()
         {
-            if (_parentDateDefine != null)
-                return ref _parentDateDefine.GetMotionDataAry();
+            if (_parentDataDefine != null)
+                return ref _parentDataDefine.GetMotionDataAry();
 
             if (!_default.IsCreated)
                 _default = new NativeArray<MotionData>(1, Allocator.Persistent);
@@ -193,47 +194,47 @@ namespace Fyc.AnimationInstancing
         }
         public int AddParentData(uint layerMask)
         {
-            if (_parentDateDefine != null)
-                return _parentDateDefine.AddParent(layerMask);
+            if (_parentDataDefine != null)
+                return _parentDataDefine.AddParent(layerMask);
 
             return -1;
         }
         
         public void RemoveParentData(int index)
         {
-            if (_parentDateDefine != null)
-                _parentDateDefine.RemoveParent(index);
+            if (_parentDataDefine != null)
+                _parentDataDefine.RemoveParent(index);
         }
         
         //Parent Move
         public void MoveParentTo(int parentIndex, Vector3[] targetPos, float moveSpeed, float rotateSpeed, float finalYaw = Single.PositiveInfinity)
         {
-            if (_parentDateDefine != null)
-                _parentDateDefine.MoveTo(parentIndex, targetPos, moveSpeed, rotateSpeed, finalYaw);
+            if (_parentDataDefine != null)
+                _parentDataDefine.MoveTo(parentIndex, targetPos, moveSpeed, rotateSpeed, finalYaw);
         }
         
         public void MoveParentTo(int parentIndex, float3 targetPos, float moveSpeed, float rotateSpeed, float finalYaw = Single.PositiveInfinity)
         {
-            if (_parentDateDefine != null)
-                _parentDateDefine.MoveTo(parentIndex, targetPos, moveSpeed, rotateSpeed, finalYaw);
+            if (_parentDataDefine != null)
+                _parentDataDefine.MoveTo(parentIndex, targetPos, moveSpeed, rotateSpeed, finalYaw);
         }
         
         public void RotateParentTo(int parentIndex, float targetYaw, float rotateSpeed)
         {
-            if (_parentDateDefine != null)
-                _parentDateDefine.RotateTo(parentIndex, targetYaw, rotateSpeed);
+            if (_parentDataDefine != null)
+                _parentDataDefine.RotateTo(parentIndex, targetYaw, rotateSpeed);
         }
         
         public void StopParentMove(int parentIndex)
         {
-            if (_parentDateDefine != null)
-                _parentDateDefine.StopMove(parentIndex);
+            if (_parentDataDefine != null)
+                _parentDataDefine.StopMove(parentIndex);
         }
         
         public void StopParentRotate(int parentIndex)
         {
-            if (_parentDateDefine != null)
-                _parentDateDefine.StopRotate(parentIndex);
+            if (_parentDataDefine != null)
+                _parentDataDefine.StopRotate(parentIndex);
         }
         
         #endregion
@@ -249,10 +250,11 @@ namespace Fyc.AnimationInstancing
         public int AddInstanceToParent(string unitName, int parentIndex, int posId, uint layerMask,  float3 pos, float3 rotation, float scale = 1)
         {
             var index = AddInstance(unitName, layerMask, pos, rotation, scale);
-            if (index != -1 && _parentDateDefine != null)
-                _parentDateDefine.SetChild(parentIndex, posId, unitName, parentIndex);
+            if (index != -1 && _parentDataDefine != null)
+                _parentDataDefine.SetChild(parentIndex, posId, unitName, index);
 
-            SetInstanceParent(unitName, index, parentIndex);
+            if (index != -1)
+                SetInstanceParent(unitName, index, parentIndex);
             
             return index;
         }
@@ -260,6 +262,8 @@ namespace Fyc.AnimationInstancing
         public void SetInstanceParent(string unitName, int index, int parentIndex)
         {
             var data = GetDrawInstanceData(unitName);
+            if (data == null)
+                return;
             data.SetParent(index, parentIndex);
         }
 
@@ -346,16 +350,16 @@ namespace Fyc.AnimationInstancing
         
         private void UpdateParentData()
         {
-            if (_parentDateDefine == null)
+            if (_parentDataDefine == null)
                 return;
             
             switch (animationDrawType)
             {
                 case AnimationDrawType.Instance:
-                    _parentDateDefine.UpdateParentMotionJob(currentDrawLayer, Time.deltaTime, _planeNativeArray);
+                    _parentDataDefine.UpdateParentMotionJob(currentDrawLayer, Time.deltaTime, _planeNativeArray);
                     break;
                 case AnimationDrawType.Buff:
-                    _parentDateDefine.UpdateParentMotionBuffer();
+                    _parentDataDefine.UpdateParentMotionBuffer();
                     break;
                 default:
                     throw new ArgumentOutOfRangeException();
@@ -369,21 +373,37 @@ namespace Fyc.AnimationInstancing
             UpdateBaseData();
             UpdateParentData();
             
-            for (int i = 0; i < _drawInstanceDataCount; i++)
+            switch (animationDrawType)
             {
-                switch (animationDrawType)
-                {
-                    case AnimationDrawType.Instance:
-                        _drawInstanceData[i].DoCullingAndAnimationJob(currentDrawLayer, Time.deltaTime, _planeNativeArray);
+                case AnimationDrawType.Instance:
+                    // Phase 1: schedule all jobs first to reduce per-type main-thread wait.
+                    for (int i = 0; i < _drawInstanceDataCount; i++)
+                    {
+                        _drawInstanceData[i].ScheduleCullingJob(currentDrawLayer, Time.deltaTime, ref _planeNativeArray, ref _parentDataDefine.GetMotionDataAry());
+                    }
+                    
+                    for (int i = 0; i < _drawInstanceDataCount; i++)
+                    {
+                        _drawInstanceData[i].CompleteScheduledCullingJob();
+                        _drawInstanceData[i].ScheduleAnimationJob(Time.deltaTime, ref _parentDataDefine.GetMotionDataAry());
+                    }
+                    
+                    // Phase 2: complete and draw.
+                    for (int i = 0; i < _drawInstanceDataCount; i++)
+                    {
+                        _drawInstanceData[i].CompleteScheduledAnimationJob();
                         _drawInstanceData[i].Draw(castShadow, receiveShadow);
-                        break;
-                    case AnimationDrawType.Buff:
+                    }
+                    break;
+                case AnimationDrawType.Buff:
+                    for (int i = 0; i < _drawInstanceDataCount; i++)
+                    {
                         _drawInstanceData[i].DoComputeCullingAndAnimation();
                         _drawInstanceData[i].IndirectDraw(castShadow, receiveShadow);
-                        break;
-                    default:
-                        throw new ArgumentOutOfRangeException();
-                }
+                    }
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException();
             }
         }
 
@@ -496,9 +516,16 @@ namespace Fyc.AnimationInstancing
         
         private AnimationData LoadAnimationData(string unitName)
         {
-            var data = Resources.Load<AnimationData>(unitName);
+            var path = $"{_loadPath}/{unitName}.asset";
 
-            return data;
+            var request = AssetManager.LoadAssetDoNotDestroy(path, typeof(AnimationData));
+            if (request.isDone && request.asset is AnimationData)
+            {
+                return request.asset as AnimationData;
+            }
+            Debug.LogError($"[AnimationDrawMgr] Failed to load asset: {path}");
+            
+            return null;
         }
 
         private void ReleaseData()
@@ -521,11 +548,12 @@ namespace Fyc.AnimationInstancing
             if (_default.IsCreated)
                 _default.Dispose();
             ClearData();
-            if (_parentDateDefine != null)
-                _parentDateDefine.Dispose();
+            if (_parentDataDefine != null)
+                _parentDataDefine.Dispose();
             PathData.Instance.Dispose(); //销毁路径数据
             _drawInstanceData = null;
-            _planeNativeArray.Dispose();
+            if (_planeNativeArray.IsCreated)
+                _planeNativeArray.Dispose();
             _init = false;
         }
     }

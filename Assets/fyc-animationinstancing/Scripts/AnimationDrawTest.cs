@@ -36,9 +36,9 @@ namespace Fyc.AnimationInstancing
         private DrawInstancingData _instancingData;
         private DrawInstancingData _bufferInstancingData;
 
-        private ParentDateDefine _parentDateInstanceDefine;
+        private ParentDataDefine _parentDataInstanceDefine;
 
-        private ParentDateDefine _parentDataBufferDefine;
+        private ParentDataDefine _parentDataBufferDefine;
         //Optimal GC
         private NativeArray<Plane> _planeNativeArray;
         private readonly Vector4[] _planeArray = new Vector4[6];
@@ -49,8 +49,8 @@ namespace Fyc.AnimationInstancing
         private void Start()
         {
             _planeNativeArray = new NativeArray<Plane>(6, Allocator.Persistent);
-            _parentDateInstanceDefine = new ParentDateDefine();
-            _parentDataBufferDefine = new ParentDateDefine(computeShader);
+            _parentDataInstanceDefine = new ParentDataDefine();
+            _parentDataBufferDefine = new ParentDataDefine(computeShader);
         }
 
         [Button]
@@ -206,7 +206,10 @@ namespace Fyc.AnimationInstancing
             UpdateBaseData();
             if (_instancingData != null)
             {
-                _instancingData.DoCullingAndAnimationJob(currentDrawLayer, Time.deltaTime, _planeNativeArray);
+                _instancingData.ScheduleCullingJob(currentDrawLayer, Time.deltaTime, ref _planeNativeArray, ref _parentDataInstanceDefine.GetMotionDataAry());
+                _instancingData.CompleteScheduledCullingJob();
+                _instancingData.ScheduleAnimationJob(Time.deltaTime, ref _parentDataInstanceDefine.GetMotionDataAry());
+                _instancingData.CompleteScheduledAnimationJob();
                 if (activeBufferDraw)
                     _instancingData.Draw();
             }
