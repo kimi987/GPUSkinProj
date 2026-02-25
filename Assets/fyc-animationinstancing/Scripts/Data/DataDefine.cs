@@ -253,6 +253,66 @@ namespace Fyc.AnimationInstancing
             DrawMaterial.SetTexture(ShaderIds.BoneTexture, texture);
         }
 
+        private FrameData GetFrameData(int index)
+        {
+            switch (_drawType)
+            {
+                case AnimationDrawType.Instance:
+                    return TotalFrames[index];
+                case AnimationDrawType.Buff:
+                    _totalFramesBuffer.GetData(_tempFrameDataAry, 0, index, 1);
+                    return _tempFrameDataAry[0];
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+        }
+
+        private void SetFrameData(int index, FrameData frameData)
+        {
+            switch (_drawType)
+            {
+                case AnimationDrawType.Instance:
+                    TotalFrames[index] = frameData;
+                    break;
+                case AnimationDrawType.Buff:
+                    _tempFrameDataAry[0] = frameData;
+                    _totalFramesBuffer.SetData(_tempFrameDataAry, 0, index, 1);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+        }
+
+        private MotionData GetMotionData(int index)
+        {
+            switch (_drawType)
+            {
+                case AnimationDrawType.Instance:
+                    return MotionDataAry[index];
+                case AnimationDrawType.Buff:
+                    _motionDataBuffer.GetData(_tempMotionDataAry, 0, index, 1);
+                    return _tempMotionDataAry[0];
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+        }
+
+        private void SetMotionData(int index, MotionData motionData)
+        {
+            switch (_drawType)
+            {
+                case AnimationDrawType.Instance:
+                    MotionDataAry[index] = motionData;
+                    break;
+                case AnimationDrawType.Buff:
+                    _tempMotionDataAry[0] = motionData;
+                    _motionDataBuffer.SetData(_tempMotionDataAry, 0, index, 1);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+        }
+
         public int AddInstance(uint layerMask)
         {
             switch (_drawType)
@@ -389,36 +449,16 @@ namespace Fyc.AnimationInstancing
         //visible 
         public void SetVisible(int index, int visible)
         {
-            switch (_drawType)
-            {
-                case AnimationDrawType.Instance:
-                    var data = MotionDataAry[index];
-                    data.Visible = visible;
-                    MotionDataAry[index] = data;
-                    break;
-                case AnimationDrawType.Buff:
-                    _motionDataBuffer.GetData(_tempMotionDataAry, 0, index, 1);
-                    _tempMotionDataAry[0].Visible = visible;
-                    _motionDataBuffer.SetData(_tempMotionDataAry, 0, index, 1);
-                    break;
-            }
+            var data = GetMotionData(index);
+            data.Visible = visible;
+            SetMotionData(index, data);
         }
         // speed 
         public void SetAnimationSpeed(int index, float speed)
         {
-            switch (_drawType)
-            {
-                case AnimationDrawType.Instance:
-                    var data = TotalFrames[index];
-                    data.AniSpeed = speed;
-                    TotalFrames[index] = data;
-                    break;
-                case AnimationDrawType.Buff:
-                    _totalFramesBuffer.GetData(_tempFrameDataAry, 0, index, 1);
-                    _tempFrameDataAry[0].AniSpeed = speed;
-                    _totalFramesBuffer.SetData(_tempFrameDataAry, 0, index, 1);
-                    break;
-            }
+            var data = GetFrameData(index);
+            data.AniSpeed = speed;
+            SetFrameData(index, data);
         }
 
         public void MoveTo(int index, float3 targetPos, float moveSpeed, float rotateSpeed,
@@ -540,23 +580,10 @@ namespace Fyc.AnimationInstancing
         
         public void MoveDir(int index, float3 dir, float speed, string animationName = "")
         {
-            switch (_drawType)
-            {
-                case AnimationDrawType.Instance:
-                    var data = MotionDataAry[index];
-                    data.MoveSpeed = speed;
-                    data.MoveDirection = math.normalize(dir);
-                    MotionDataAry[index] = data;
-                    break;
-                case AnimationDrawType.Buff:
-                    _motionDataBuffer.GetData(_tempMotionDataAry, 0, index, 1);
-                    _tempMotionDataAry[0].MoveSpeed = speed;
-                    _tempMotionDataAry[0].MoveDirection = math.normalize(dir); 
-                    _motionDataBuffer.SetData(_tempMotionDataAry, 0, index, 1);
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
+            var data = GetMotionData(index);
+            data.MoveSpeed = speed;
+            data.MoveDirection = math.normalize(dir);
+            SetMotionData(index, data);
 
             if (!string.IsNullOrEmpty(animationName))
                 PlayAnimation(index, animationName);
@@ -565,68 +592,28 @@ namespace Fyc.AnimationInstancing
         // stop moving
         public void StopMove(int index)
         {
-            switch (_drawType)
-            {
-                case AnimationDrawType.Instance:
-                    var data = MotionDataAry[index];
-                    data.StopMove();
-                    MotionDataAry[index] = data;
-                    break;
-                case AnimationDrawType.Buff:
-                    _motionDataBuffer.GetData(_tempMotionDataAry, 0, index, 1);
-                    _tempMotionDataAry[0].StopMove();
-                    _motionDataBuffer.SetData(_tempMotionDataAry, 0, index, 1);
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
-
+            var data = GetMotionData(index);
+            data.StopMove();
+            SetMotionData(index, data);
         }
 
         public void RotateTo(int index, float targetY, float rotateSpeed)
         {
-            switch (_drawType)
-            {
-                case AnimationDrawType.Instance:
-                    var data = MotionDataAry[index];
-                    data.RotateYSpeed = rotateSpeed;
-                    data.RotateYSpeedSetting = rotateSpeed;
-                    data.RotateYFinal = targetY;
-                    MotionDataAry[index] = data;
-                    break;
-                case AnimationDrawType.Buff:
-                    _motionDataBuffer.GetData(_tempMotionDataAry, 0, index, 1);
-                    _tempMotionDataAry[0].RotateYSpeed = rotateSpeed;
-                    _tempMotionDataAry[0].RotateYSpeedSetting = rotateSpeed;
-                    _tempMotionDataAry[0].RotateYFinal = targetY;
-                    _motionDataBuffer.SetData(_tempMotionDataAry, 0, index, 1);
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
+            var data = GetMotionData(index);
+            data.RotateYSpeed = rotateSpeed;
+            data.RotateYSpeedSetting = rotateSpeed;
+            data.RotateYFinal = targetY;
+            SetMotionData(index, data);
         }
         
         //移动相关函数 可以通过设置方向或者设置目的地, 来通过job或者compute计算移动
         //减少每帧设置位移数据的消耗
         public void RotateY(int index, float speed, string animationName = "")
         {
-            switch (_drawType)
-            {
-                case AnimationDrawType.Instance:
-                    var data = MotionDataAry[index];
-                    data.RotateYSpeed = speed;
-                    data.RotateYSpeedSetting = speed;
-                    MotionDataAry[index] = data;
-                    break;
-                case AnimationDrawType.Buff:
-                    _motionDataBuffer.GetData(_tempMotionDataAry, 0, index, 1);
-                    _tempMotionDataAry[0].RotateYSpeed = speed;
-                    _tempMotionDataAry[0].RotateYSpeedSetting = speed;
-                    _motionDataBuffer.SetData(_tempMotionDataAry, 0, index, 1);
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
+            var data = GetMotionData(index);
+            data.RotateYSpeed = speed;
+            data.RotateYSpeedSetting = speed;
+            SetMotionData(index, data);
             
             if (!string.IsNullOrEmpty(animationName))
                 PlayAnimation(index, animationName);
@@ -634,156 +621,61 @@ namespace Fyc.AnimationInstancing
         // stop rotate
         public void StopRotate(int index)
         {
-            switch (_drawType)
-            {
-                case AnimationDrawType.Instance:
-                    var data = MotionDataAry[index];
-                    data.StopRotate();
-                    MotionDataAry[index] = data;
-                    break;
-                case AnimationDrawType.Buff:
-                    _motionDataBuffer.GetData(_tempMotionDataAry, 0, index, 1);
-                    _tempMotionDataAry[0].StopRotate();
-                    _motionDataBuffer.SetData(_tempMotionDataAry, 0, index, 1);
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
-
+            var data = GetMotionData(index);
+            data.StopRotate();
+            SetMotionData(index, data);
         }
         //translation
         // set TRS
         public void SetTRS(int index, float3 position, float3 rotation, float scale)
         {
-            switch (_drawType)
-            {
-                case AnimationDrawType.Instance:
-                    var data = MotionDataAry[index];
-                    data.Position = position;
-                    data.Rotation = rotation;
-                    data.Scale = scale;
-                    MotionDataAry[index] = data;
-                    break;
-                case AnimationDrawType.Buff:
-                    _motionDataBuffer.GetData(_tempMotionDataAry, 0, index, 1);
-                    _tempMotionDataAry[0].Position = position;
-                    _tempMotionDataAry[0].Rotation = rotation;
-                    _tempMotionDataAry[0].Scale = scale;
-                    _motionDataBuffer.SetData(_tempMotionDataAry, 0, index, 1);
-                    break;
-            }
+            var data = GetMotionData(index);
+            data.Position = position;
+            data.Rotation = rotation;
+            data.Scale = scale;
+            SetMotionData(index, data);
         }
 
         public bool GetPosition(int index, out float3 pos)
         {
-            switch (_drawType)
-            {
-                case AnimationDrawType.Instance:
-                    var data = MotionDataAry[index];
-                    pos = data.Position;
-                    return true;
-                case AnimationDrawType.Buff:
-                    _motionDataBuffer.GetData(_tempMotionDataAry, 0, index, 1);
-                    pos = _tempMotionDataAry[0].Position;
-                    return true;
-                default:
-                    pos = float3.zero;
-                    return false;
-            }
+            pos = GetMotionData(index).Position;
+            return true;
         }
         
         // set position
         public void SetPosition(int index, float3 position)
         {
-            switch (_drawType)
-            {
-                case AnimationDrawType.Instance:
-                    var data = MotionDataAry[index];
-                    data.Position = position;
-                    MotionDataAry[index] = data;
-                    break;
-                case AnimationDrawType.Buff:
-                    _motionDataBuffer.GetData(_tempMotionDataAry, 0, index, 1);
-                    _tempMotionDataAry[0].Position = position;
-                    _motionDataBuffer.SetData(_tempMotionDataAry, 0, index, 1);
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
+            var data = GetMotionData(index);
+            data.Position = position;
+            SetMotionData(index, data);
         }
 
         public float GetRotationY(int index)
         {
-            switch (_drawType)
-            {
-                case AnimationDrawType.Instance:
-                    var data = MotionDataAry[index];
-                    return data.Rotation.y;
-                case AnimationDrawType.Buff:
-                    _motionDataBuffer.GetData(_tempMotionDataAry, 0, index, 1);
-                    return _tempMotionDataAry[0].Rotation.y;
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
+            return GetMotionData(index).Rotation.y;
         }
         
         //rotation
         public void SetRotation(int index, float3 rotation)
         {
-            switch (_drawType)
-            {
-                case AnimationDrawType.Instance:
-                    var data = MotionDataAry[index];
-                    data.Rotation = rotation;
-                    MotionDataAry[index] = data;
-                    break;
-                case AnimationDrawType.Buff:
-                    _motionDataBuffer.GetData(_tempMotionDataAry, 0, index, 1);
-                    _tempMotionDataAry[0].Rotation = -rotation;  //
-                    _motionDataBuffer.SetData(_tempMotionDataAry, 0, index, 1);
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
+            var data = GetMotionData(index);
+            data.Rotation = _drawType == AnimationDrawType.Buff ? -rotation : rotation;
+            SetMotionData(index, data);
         }
         
         public void SetRotationY(int index, float yaw)
         {
-            switch (_drawType)
-            {
-                case AnimationDrawType.Instance:
-                    var data = MotionDataAry[index];
-                    data.Rotation.y = yaw;
-                    MotionDataAry[index] = data;
-                    break;
-                case AnimationDrawType.Buff:
-                    _motionDataBuffer.GetData(_tempMotionDataAry, 0, index, 1);
-                    _tempMotionDataAry[0].Rotation.y = -yaw;  //
-                    _motionDataBuffer.SetData(_tempMotionDataAry, 0, index, 1);
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
+            var data = GetMotionData(index);
+            data.Rotation.y = _drawType == AnimationDrawType.Buff ? -yaw : yaw;
+            SetMotionData(index, data);
         }
         
         //scale
         public void SetScale(int index, float scale)
         {
-            switch (_drawType)
-            {
-                case AnimationDrawType.Instance:
-                    var data = MotionDataAry[index];
-                    data.Scale = scale;
-                    MotionDataAry[index] = data;
-                    break;
-                case AnimationDrawType.Buff:
-                    _motionDataBuffer.GetData(_tempMotionDataAry, 0, index, 1);
-                    _tempMotionDataAry[0].Scale = scale;
-                    _motionDataBuffer.SetData(_tempMotionDataAry, 0, index, 1);
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
+            var data = GetMotionData(index);
+            data.Scale = scale;
+            SetMotionData(index, data);
         }
         #region JobSystem
 
@@ -1032,22 +924,11 @@ namespace Fyc.AnimationInstancing
 
         public void SetParent(int index, int parentIndex)
         {
-            switch (_drawType)
-            {
-                case AnimationDrawType.Instance:
-                    var data = MotionDataAry[index];
-                    data.ParentIndex = parentIndex;
-                    MotionDataAry[index] = data;
-                    Debug.LogError("SetParent = " + parentIndex);
-                    break;
-                case AnimationDrawType.Buff:
-                    _motionDataBuffer.GetData(_tempMotionDataAry, 0, index, 1);
-                    _tempMotionDataAry[0].ParentIndex = parentIndex;
-                    _motionDataBuffer.SetData(_tempMotionDataAry, 0, index, 1);
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
+            var data = GetMotionData(index);
+            data.ParentIndex = parentIndex;
+            SetMotionData(index, data);
+            if (_drawType == AnimationDrawType.Instance)
+                Debug.LogError("SetParent = " + parentIndex);
         }
 
         #endregion
