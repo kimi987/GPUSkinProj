@@ -67,13 +67,13 @@ namespace Fyc.AnimationInstancing
 
             animationDrawType = AnimationDrawType.Instance;
             //升级到2022要判定Indirect Draw
-            // if (SystemInfo.supportsComputeShaders && SystemInfo.supportsIndirectArgumentsBuffer)
-            // {
-            //     bool isGLES31 = SystemInfo.graphicsDeviceType == GraphicsDeviceType.OpenGLES3 && 
-            //                     SystemInfo.graphicsDeviceVersion.Contains("OpenGL ES 3.1");
-            //     if (!isGLES31)
-            //         animationDrawType = AnimationDrawType.Buff;
-            // }
+            if (SystemInfo.supportsComputeShaders && SystemInfo.supportsIndirectArgumentsBuffer)
+            {
+                bool isGLES31 = SystemInfo.graphicsDeviceType == GraphicsDeviceType.OpenGLES3 && 
+                                SystemInfo.graphicsDeviceVersion.Contains("OpenGL ES 3.1");
+                if (!isGLES31)
+                    animationDrawType = AnimationDrawType.Buff;
+            }
 
             if (needParentSupport)
             {
