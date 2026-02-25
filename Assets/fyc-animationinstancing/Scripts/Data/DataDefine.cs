@@ -142,6 +142,9 @@ namespace Fyc.AnimationInstancing
         private ComputeBuffer _avaFramesBuffer;
         private ComputeBuffer _motionDataBuffer;
         private ComputeBuffer _aniInfoBuffer;
+        private MotionData[] _motionDataReadbackCache;
+        private int _motionDataReadbackFrame = -1;
+        private bool _motionDataReadbackValid;
 
         private FrameData[] _tempFrameDataAry;  //用于读取和设置Buffer
         private MotionData[] _tempMotionDataAry;
@@ -187,6 +190,7 @@ namespace Fyc.AnimationInstancing
             _totalFramesBuffer.SetData(TotalFrames);
             _avaFramesBuffer = new ComputeBuffer(defaultNum, Marshal.SizeOf<DrawFrameData>(), ComputeBufferType.Append);
             _motionDataBuffer = new ComputeBuffer(defaultNum, Marshal.SizeOf<MotionData>());
+            _motionDataReadbackCache = new MotionData[defaultNum];
 
             DrawMaterial.SetBuffer(ComputeShaderIds.AvaBufferName, _avaFramesBuffer);
             
@@ -297,6 +301,28 @@ namespace Fyc.AnimationInstancing
             }
         }
 
+        private void InvalidateMotionDataReadback()
+        {
+            _motionDataReadbackValid = false;
+            _motionDataReadbackFrame = -1;
+        }
+
+        private void EnsureMotionDataReadback()
+        {
+            if (_drawType != AnimationDrawType.Buff)
+                return;
+            if (_motionDataReadbackCache == null)
+                _motionDataReadbackCache = new MotionData[MaxCount];
+            if (_motionDataReadbackValid && _motionDataReadbackFrame == Time.frameCount)
+                return;
+
+            if (InstancingCount > 0)
+                _motionDataBuffer.GetData(_motionDataReadbackCache, 0, 0, InstancingCount);
+
+            _motionDataReadbackValid = true;
+            _motionDataReadbackFrame = Time.frameCount;
+        }
+
         private void SetMotionData(int index, MotionData motionData)
         {
             switch (_drawType)
@@ -307,6 +333,7 @@ namespace Fyc.AnimationInstancing
                 case AnimationDrawType.Buff:
                     _tempMotionDataAry[0] = motionData;
                     _motionDataBuffer.SetData(_tempMotionDataAry, 0, index, 1);
+                    InvalidateMotionDataReadback();
                     break;
                 default:
                     throw new ArgumentOutOfRangeException();
@@ -338,6 +365,7 @@ namespace Fyc.AnimationInstancing
                 _motionDataBuffer.GetData(_tempMotionDataAry, 0, index, 1);
                 _tempMotionDataAry[0].Reset(layerMask);
                 _motionDataBuffer.SetData(_tempMotionDataAry, 0, index, 1);
+                InvalidateMotionDataReadback();
                 return index;
             }
             if (InstancingCount >= MaxCount)
@@ -351,6 +379,7 @@ namespace Fyc.AnimationInstancing
             _motionDataBuffer.GetData(_tempMotionDataAry, 0, InstancingCount, 1);
             _tempMotionDataAry[0].Reset(layerMask);
             _motionDataBuffer.SetData(_tempMotionDataAry, 0, InstancingCount, 1);
+            InvalidateMotionDataReadback();
             
             index = InstancingCount;
             InstancingCount++;
@@ -427,6 +456,7 @@ namespace Fyc.AnimationInstancing
             _motionDataBuffer.GetData(_tempMotionDataAry, 0, index, 1);
             _tempMotionDataAry[0].Enable = 0; //Disable
             _motionDataBuffer.SetData(_tempMotionDataAry, 0, index, 1);
+            InvalidateMotionDataReadback();
             if (_tempMotionDataAry[0].PathIndex >= 0)
                 PathData.Instance.RemovePos(_tempMotionDataAry[0].PathIndex);
         }
@@ -511,6 +541,7 @@ namespace Fyc.AnimationInstancing
                     }
             
                     _motionDataBuffer.SetData(_tempMotionDataAry, 0, index, 1);
+                    InvalidateMotionDataReadback();
                     break;
                 default:
                     throw new ArgumentOutOfRangeException();
@@ -558,6 +589,7 @@ namespace Fyc.AnimationInstancing
                     {
                         _tempMotionDataAry[0].StopMove();
                         _motionDataBuffer.SetData(_tempMotionDataAry, 0, index, 1);
+                        InvalidateMotionDataReadback();
                         break;
                     }
                     _tempMotionDataAry[0].PathIndex = pathIndex + targetPos.Length - 1;
@@ -571,6 +603,7 @@ namespace Fyc.AnimationInstancing
                     _tempMotionDataAry[0].RotateYTarget = Utils.DirectionToEulerAngles(moveVec).y;
                     _tempMotionDataAry[0].RotateYFinal = finalYaw;
                     _motionDataBuffer.SetData(_tempMotionDataAry, 0, index, 1);
+                    InvalidateMotionDataReadback();
                     
                     break;
                 default:
@@ -638,6 +671,12 @@ namespace Fyc.AnimationInstancing
 
         public bool GetPosition(int index, out float3 pos)
         {
+            if (_drawType == AnimationDrawType.Buff)
+            {
+                EnsureMotionDataReadback();
+                pos = _motionDataReadbackCache[index].Position;
+                return true;
+            }
             pos = GetMotionData(index).Position;
             return true;
         }
@@ -652,6 +691,11 @@ namespace Fyc.AnimationInstancing
 
         public float GetRotationY(int index)
         {
+            if (_drawType == AnimationDrawType.Buff)
+            {
+                EnsureMotionDataReadback();
+                return _motionDataReadbackCache[index].Rotation.y;
+            }
             return GetMotionData(index).Rotation.y;
         }
         
@@ -746,6 +790,7 @@ namespace Fyc.AnimationInstancing
             
             // Debug.LogError("1111111111_tempFrameDataAry[0].rotation = " + _tempFrameDataAry[0].Rotation + " _" + _tempMotionDataAry[0].RotateYSpeed + "_" + _tempMotionDataAry[0].RotateYSpeedSetting);
             _animationDrawShader.Dispatch(_cullingAndAnimationKernel, Mathf.CeilToInt(InstancingCount / 64f), 1, 1);
+            InvalidateMotionDataReadback();
             ComputeBuffer.CopyCount(_avaFramesBuffer, _argsBuffer, 4);
             
             //Debug
