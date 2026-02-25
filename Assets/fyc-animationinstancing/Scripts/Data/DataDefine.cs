@@ -122,6 +122,8 @@ namespace Fyc.AnimationInstancing
         private NativeArray<float> TransitionProgress;
         private NativeArray<Matrix4x4> WorldMatrix; //绘制的矩阵
         private NativeArray<AnimationSaveData> AniInfoData;
+        private JobHandle _pendingAnimationJobHandle;
+        private bool _hasPendingAnimationJob;
         
         //Optimal for GC
         private NativeList<int> VisibleIndices;
@@ -797,7 +799,7 @@ namespace Fyc.AnimationInstancing
         }
         #region JobSystem
 
-        public void DoCullingAndAnimationJob(uint layerMask, float deltaTime, NativeArray<Plane> planeNativeArray)
+        public void ScheduleCullingAndAnimationJob(uint layerMask, float deltaTime, NativeArray<Plane> planeNativeArray)
         {
             VisibleIndices.Clear();
             var job = new CullingUnitJob()
@@ -827,6 +829,12 @@ namespace Fyc.AnimationInstancing
             // PreFrameIndexes = new NativeArray<float>(DrawCount, Allocator.TempJob);
             // TransitionProgress = new NativeArray<float>(DrawCount, Allocator.TempJob);
             
+            if (DrawCount <= 0)
+            {
+                _hasPendingAnimationJob = false;
+                return;
+            }
+            
             var aniJob = new AnimationJob()
             {
                 DeltaTime = deltaTime,
@@ -840,10 +848,25 @@ namespace Fyc.AnimationInstancing
                 PreFrameIndexes = PreFrameIndexes,
                 TransitionProgress = TransitionProgress,
             };
-            handle = aniJob.Schedule(DrawCount, 64);
-            handle.Complete();
+            _pendingAnimationJobHandle = aniJob.Schedule(DrawCount, 64);
+            _hasPendingAnimationJob = true;
             //Debug
             // Debug.LogError("WorldMatrix[0] = "  + WorldMatrix[0]);
+        }
+
+        public void CompleteScheduledAnimationJob()
+        {
+            if (!_hasPendingAnimationJob)
+                return;
+
+            _pendingAnimationJobHandle.Complete();
+            _hasPendingAnimationJob = false;
+        }
+
+        public void DoCullingAndAnimationJob(uint layerMask, float deltaTime, NativeArray<Plane> planeNativeArray)
+        {
+            ScheduleCullingAndAnimationJob(layerMask, deltaTime, planeNativeArray);
+            CompleteScheduledAnimationJob();
         }
         
         #endregion

@@ -375,22 +375,31 @@ namespace Fyc.AnimationInstancing
 
             UpdateBaseData();
             UpdateParentData();
-            
-            for (int i = 0; i < _drawInstanceDataCount; i++)
+
+            switch (animationDrawType)
             {
-                switch (animationDrawType)
-                {
-                    case AnimationDrawType.Instance:
-                        _drawInstanceData[i].DoCullingAndAnimationJob(currentDrawLayer, Time.deltaTime, _planeNativeArray);
+                case AnimationDrawType.Instance:
+                    // Phase 1: schedule all jobs first to reduce per-type main-thread wait.
+                    for (int i = 0; i < _drawInstanceDataCount; i++)
+                    {
+                        _drawInstanceData[i].ScheduleCullingAndAnimationJob(currentDrawLayer, Time.deltaTime, _planeNativeArray);
+                    }
+                    // Phase 2: complete and draw.
+                    for (int i = 0; i < _drawInstanceDataCount; i++)
+                    {
+                        _drawInstanceData[i].CompleteScheduledAnimationJob();
                         _drawInstanceData[i].Draw(castShadow, receiveShadow);
-                        break;
-                    case AnimationDrawType.Buff:
+                    }
+                    break;
+                case AnimationDrawType.Buff:
+                    for (int i = 0; i < _drawInstanceDataCount; i++)
+                    {
                         _drawInstanceData[i].DoComputeCullingAndAnimation();
                         _drawInstanceData[i].IndirectDraw(castShadow, receiveShadow);
-                        break;
-                    default:
-                        throw new ArgumentOutOfRangeException();
-                }
+                    }
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException();
             }
         }
 
