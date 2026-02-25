@@ -7,6 +7,7 @@ namespace Fyc.AnimationInstancing
         public static int FrameIndex = Shader.PropertyToID("_FrameIndex");
         public static int PreFrameIndex = Shader.PropertyToID("_PreFrameIndex");
         public static int TransitionProgress = Shader.PropertyToID("_TransitionProgress");
+        public static int PackedFrameData = Shader.PropertyToID("_PackedFrameData");
         public static int BoneTexture = Shader.PropertyToID("_BoneTexture");
         public static int BoneTextureWidth = Shader.PropertyToID("_BoneTextureWidth");
         public static int BoneTextureHeight = Shader.PropertyToID("_BoneTextureHeight");

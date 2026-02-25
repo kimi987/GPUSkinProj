@@ -17,12 +17,8 @@ uniform float _PreFrameIndex;
 uniform float _TransitionProgress;
 #else
 UNITY_INSTANCING_BUFFER_START(Props)
-    UNITY_DEFINE_INSTANCED_PROP(float, _PreFrameIndex)
-#define PreFrameIndex_arr Props
-    UNITY_DEFINE_INSTANCED_PROP(float, _FrameIndex)
-#define FrameIndex_arr Props
-    UNITY_DEFINE_INSTANCED_PROP(float, _TransitionProgress)
-#define TransitionProgress_arr Props
+    UNITY_DEFINE_INSTANCED_PROP(float4, _PackedFrameData)
+#define PackedFrameData_arr Props
 UNITY_INSTANCING_BUFFER_END(Props)
 #endif
 
@@ -83,9 +79,10 @@ real4 skinning(inout AttributesAnimationInstancing IN)
     float preAniFrame = _PreFrameIndex;
     float progress = _TransitionProgress;
     #else
-    float curFrame = UNITY_ACCESS_INSTANCED_PROP(FrameIndex_arr, _FrameIndex);
-    float preAniFrame = UNITY_ACCESS_INSTANCED_PROP(PreFrameIndex_arr, _PreFrameIndex);
-    float progress = UNITY_ACCESS_INSTANCED_PROP(TransitionProgress_arr, _TransitionProgress);
+    float4 packedFrameData = UNITY_ACCESS_INSTANCED_PROP(PackedFrameData_arr, _PackedFrameData);
+    float curFrame = packedFrameData.x;
+    float preAniFrame = packedFrameData.y;
+    float progress = packedFrameData.z;
     #endif
 
     int preFrame = curFrame;
@@ -126,9 +123,10 @@ real4 skinningShadow(uint4 bone, float4 positionOS)
     float preAniFrame = _PreFrameIndex;
     float progress = _TransitionProgress;
 #else
-    float curFrame = UNITY_ACCESS_INSTANCED_PROP(FrameIndex_arr, _FrameIndex);
-    float preAniFrame = UNITY_ACCESS_INSTANCED_PROP(PreFrameIndex_arr, _PreFrameIndex);
-    float progress = UNITY_ACCESS_INSTANCED_PROP(TransitionProgress_arr, _TransitionProgress);
+    float4 packedFrameData = UNITY_ACCESS_INSTANCED_PROP(PackedFrameData_arr, _PackedFrameData);
+    float curFrame = packedFrameData.x;
+    float preAniFrame = packedFrameData.y;
+    float progress = packedFrameData.z;
 #endif
 
     int preFrame = curFrame;

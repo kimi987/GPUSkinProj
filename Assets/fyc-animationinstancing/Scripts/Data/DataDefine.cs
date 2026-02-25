@@ -106,6 +106,7 @@ namespace Fyc.AnimationInstancing
     public class DrawInstancingData
     {
         static Bounds DefaultBounds = new Bounds(Vector3.zero, new Vector3(3000, 3000, 3000));
+        private static DrawInstancingData _lastComputeBoundData;
         private Mesh DrawMesh;
         private Material DrawMaterial;
         private int MaxCount;
@@ -130,7 +131,9 @@ namespace Fyc.AnimationInstancing
         private float[] _frameIndexCache = new float[1023];
         private float[] _preFrameIndexCache = new float[1023];
         private float[] _transitionProgressCache = new float[1023];
+        private Vector4[] _packedFrameDataCache = new Vector4[1023];
         private Matrix4x4[] _matrixCache = new Matrix4x4[1023];
+        private readonly bool _usePackedFrameData;
 
         //Animation
         private AnimationData AniData;
@@ -221,6 +224,8 @@ namespace Fyc.AnimationInstancing
             
             //set path ary data init
             PathData.Instance.SetComputeShaderData(_animationDrawShader, _cullingAndAnimationKernel);
+            _usePackedFrameData = SystemInfo.graphicsDeviceType != GraphicsDeviceType.OpenGLES2 &&
+                                  SystemInfo.graphicsDeviceType != GraphicsDeviceType.OpenGLES3;
         }
 
         public DrawInstancingData(AnimationData mainData, int defaultNum = 1023)
@@ -264,6 +269,8 @@ namespace Fyc.AnimationInstancing
                 var info = mainData.GetAnimation(i);
                 InfoIndexes[info.animationNameHash] = i;
             }
+            _usePackedFrameData = SystemInfo.graphicsDeviceType != GraphicsDeviceType.OpenGLES2 &&
+                                  SystemInfo.graphicsDeviceType != GraphicsDeviceType.OpenGLES3;
         }
 
         public void SetBoneTexture(Texture2D texture)
@@ -878,9 +885,13 @@ namespace Fyc.AnimationInstancing
         public void DoComputeCullingAndAnimation()
         {
             FlushPendingBufferWrites();
-            _animationDrawShader.SetBuffer(_cullingAndAnimationKernel, ComputeShaderIds.AniInfoBufferName, _aniInfoBuffer);
-            _animationDrawShader.SetBuffer(_cullingAndAnimationKernel, ComputeShaderIds.TotalBufferName, _totalFramesBuffer);
-            _animationDrawShader.SetBuffer(_cullingAndAnimationKernel, ComputeShaderIds.AvaBufferName, _avaFramesBuffer);
+            if (!ReferenceEquals(_lastComputeBoundData, this))
+            {
+                _animationDrawShader.SetBuffer(_cullingAndAnimationKernel, ComputeShaderIds.AniInfoBufferName, _aniInfoBuffer);
+                _animationDrawShader.SetBuffer(_cullingAndAnimationKernel, ComputeShaderIds.TotalBufferName, _totalFramesBuffer);
+                _animationDrawShader.SetBuffer(_cullingAndAnimationKernel, ComputeShaderIds.AvaBufferName, _avaFramesBuffer);
+                _lastComputeBoundData = this;
+            }
             _animationDrawShader.SetBuffer(_cullingAndAnimationKernel, ComputeShaderIds.MotionBufferName, _motionDataBuffer);
             _animationDrawShader.SetInt(ComputeShaderIds.CullingType, 0);
             _animationDrawShader.SetInt(ComputeShaderIds.InstanceCount, InstancingCount);
@@ -1031,9 +1042,16 @@ namespace Fyc.AnimationInstancing
             {
                 PropertyBlock = new MaterialPropertyBlock();
                 //预分配大小
-                PropertyBlock.SetFloatArray(ShaderIds.FrameIndex, new float[1023]);
-                PropertyBlock.SetFloatArray(ShaderIds.PreFrameIndex, new float[1023]);
-                PropertyBlock.SetFloatArray(ShaderIds.TransitionProgress, new float[1023]);
+                if (_usePackedFrameData)
+                {
+                    PropertyBlock.SetVectorArray(ShaderIds.PackedFrameData, new Vector4[1023]);
+                }
+                else
+                {
+                    PropertyBlock.SetFloatArray(ShaderIds.FrameIndex, new float[1023]);
+                    PropertyBlock.SetFloatArray(ShaderIds.PreFrameIndex, new float[1023]);
+                    PropertyBlock.SetFloatArray(ShaderIds.TransitionProgress, new float[1023]);
+                }
             }
                 
             int remaining = DrawCount;
@@ -1044,14 +1062,28 @@ namespace Fyc.AnimationInstancing
                 int sliceCount = Mathf.Min(remaining, 1023);
         
                 // 使用 CopyTo 填充预分配的数组，不产生新的内存申请
-                NativeArray<float>.Copy(FrameIndexes, startIndex, _frameIndexCache, 0, sliceCount);
-                NativeArray<float>.Copy(PreFrameIndexes, startIndex, _preFrameIndexCache, 0, sliceCount);
-                NativeArray<float>.Copy(TransitionProgress, startIndex, _transitionProgressCache, 0, sliceCount);
                 NativeArray<Matrix4x4>.Copy(WorldMatrix, startIndex, _matrixCache, 0, sliceCount);
 
-                PropertyBlock.SetFloatArray(ShaderIds.FrameIndex, _frameIndexCache);
-                PropertyBlock.SetFloatArray(ShaderIds.PreFrameIndex, _preFrameIndexCache);
-                PropertyBlock.SetFloatArray(ShaderIds.TransitionProgress, _transitionProgressCache);
+                if (_usePackedFrameData)
+                {
+                    for (int i = 0; i < sliceCount; i++)
+                    {
+                        int sourceIndex = startIndex + i;
+                        _packedFrameDataCache[i].x = FrameIndexes[sourceIndex];
+                        _packedFrameDataCache[i].y = PreFrameIndexes[sourceIndex];
+                        _packedFrameDataCache[i].z = TransitionProgress[sourceIndex];
+                    }
+                    PropertyBlock.SetVectorArray(ShaderIds.PackedFrameData, _packedFrameDataCache);
+                }
+                else
+                {
+                    NativeArray<float>.Copy(FrameIndexes, startIndex, _frameIndexCache, 0, sliceCount);
+                    NativeArray<float>.Copy(PreFrameIndexes, startIndex, _preFrameIndexCache, 0, sliceCount);
+                    NativeArray<float>.Copy(TransitionProgress, startIndex, _transitionProgressCache, 0, sliceCount);
+                    PropertyBlock.SetFloatArray(ShaderIds.FrameIndex, _frameIndexCache);
+                    PropertyBlock.SetFloatArray(ShaderIds.PreFrameIndex, _preFrameIndexCache);
+                    PropertyBlock.SetFloatArray(ShaderIds.TransitionProgress, _transitionProgressCache);
+                }
 
                 Graphics.DrawMeshInstanced(DrawMesh, 0, DrawMaterial, _matrixCache, 
                     sliceCount, PropertyBlock, drawShadow, receiveShadow, layer);
@@ -1106,6 +1138,8 @@ namespace Fyc.AnimationInstancing
         public void Dispose()
         {
             ClearPath();
+            if (ReferenceEquals(_lastComputeBoundData, this))
+                _lastComputeBoundData = null;
 
             if (_boneTexture)
             {
