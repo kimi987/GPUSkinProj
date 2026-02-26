@@ -43,6 +43,7 @@ namespace Fyc.AnimationInstancing
         private int _boundCount = 0;
         private int _textureBlockWidth = 1;
         private int _textureBlockHeight = 0;
+        private Dictionary<Transform, int> _mergedBoneIndexMap;
         
         private Dictionary<AnimatorState, AnimatorStateTransition[]> _cacheTransitions;
         private Dictionary<int, VertexCache> _vertexCaches;
@@ -115,7 +116,7 @@ namespace Fyc.AnimationInstancing
             var boneTransforms = Utils.MergeBone(skinnedMeshRenders, bindPos);
             
             //Bake Mesh
-            GenerateMesh(skinnedMeshRenders, 2);
+            GenerateMesh(skinnedMeshRenders, boneTransforms, 2);
             GenerateMaterial(skinnedMeshRenders);
             
             //Bake Animation Texture And Info
@@ -161,8 +162,14 @@ namespace Fyc.AnimationInstancing
             }
         }
 
-        private void GenerateMesh(SkinnedMeshRenderer[] skinnedMeshRenderers, int bonePerVertex)
+        private void GenerateMesh(SkinnedMeshRenderer[] skinnedMeshRenderers, Transform[] mergedBones, int bonePerVertex)
         {
+            _mergedBoneIndexMap = new Dictionary<Transform, int>(mergedBones.Length);
+            for (int i = 0; i < mergedBones.Length; i++)
+            {
+                _mergedBoneIndexMap[mergedBones[i]] = i;
+            }
+
             var totalVertexCount = 0;
             var totalIndexCount = 0;
             for (int i = 0; i < skinnedMeshRenderers.Length; i++)
@@ -199,6 +206,15 @@ namespace Fyc.AnimationInstancing
             for (int i = 0; i < skinnedMeshRenderers.Length; i++)
             {
                 var m = skinnedMeshRenderers[i].sharedMesh;
+                var rendererBones = skinnedMeshRenderers[i].bones;
+                var localToMerged = new int[rendererBones.Length];
+                for (int j = 0; j < rendererBones.Length; j++)
+                {
+                    if (_mergedBoneIndexMap.TryGetValue(rendererBones[j], out int mergedIndex))
+                        localToMerged[j] = mergedIndex;
+                    else
+                        localToMerged[j] = -1;
+                }
 
                 if (!m)
                     continue;
@@ -215,7 +231,20 @@ namespace Fyc.AnimationInstancing
                         (half)boneWeight.weight2, (half)boneWeight.weight3);
                     
                     Debug.Assert(weight.x > 0.0f);
-                    half4 boneIndex = new half4((half)boneWeight.boneIndex0, (half)boneWeight.boneIndex1, (half)boneWeight.boneIndex2, (half)boneWeight.boneIndex3);
+                    int remapBone0 = (boneWeight.boneIndex0 >= 0 && boneWeight.boneIndex0 < localToMerged.Length)
+                        ? localToMerged[boneWeight.boneIndex0] : -1;
+                    int remapBone1 = (boneWeight.boneIndex1 >= 0 && boneWeight.boneIndex1 < localToMerged.Length)
+                        ? localToMerged[boneWeight.boneIndex1] : -1;
+                    int remapBone2 = (boneWeight.boneIndex2 >= 0 && boneWeight.boneIndex2 < localToMerged.Length)
+                        ? localToMerged[boneWeight.boneIndex2] : -1;
+                    int remapBone3 = (boneWeight.boneIndex3 >= 0 && boneWeight.boneIndex3 < localToMerged.Length)
+                        ? localToMerged[boneWeight.boneIndex3] : -1;
+                    Debug.Assert(remapBone0 >= 0, "Failed to remap bone index for merged skinned meshes.");
+                    if (remapBone0 < 0) remapBone0 = 0;
+                    if (remapBone1 < 0) remapBone1 = remapBone0;
+                    if (remapBone2 < 0) remapBone2 = remapBone0;
+                    if (remapBone3 < 0) remapBone3 = remapBone0;
+                    half4 boneIndex = new half4((half)remapBone0, (half)remapBone1, (half)remapBone2, (half)remapBone3);
                     Debug.Assert(boneIndex.x >= 0);
                     switch (bonePerVertex)
                     {
