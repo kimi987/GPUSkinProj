@@ -22,8 +22,9 @@ struct VaryingsAnimationInstancing
     real3 normalW : TEXCOORD2;
     real4 tangentW : TEXCOORD3;
     real3 bitangentWS : TEXCOORD4;
-    real4 shadowCoord : TEXCOORD5;
-    real3 vertexSH : TEXCOORD6;
+    // real4 shadowCoord : TEXCOORD5;
+    real3 vertexSH : TEXCOORD5;
+    real4 screenPos : TEXCOORD6;
     UNITY_VERTEX_INPUT_INSTANCE_ID
 };
 

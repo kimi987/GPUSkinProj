@@ -178,7 +178,7 @@ namespace Fyc.AnimationInstancing
                 scale *= parentMotion.Scale;
             }
             
-            if (motion.MoveSpeed < 0.001 && math.abs(motion.MoveSpeed) < 0.001)
+            if (motion.MoveSpeed < 0.001 && motion.RotateYSpeed < 0.001)
             {
                 //Stop move
                 if (data.ResetAniIndex >= 0)

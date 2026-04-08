@@ -169,7 +169,7 @@ namespace Fyc.AnimationInstancing
         [Button]
         public void AddInstance(string unitName)
         {
-            animationDrawMgr.Init("Assets/DataExport/AnimationInstancingAnimationTextureData", true);
+            animationDrawMgr.Init("Assets/Res/Army/Export", true);
             animationDrawMgr.SetCullingCamera(Camera.main);
             animationDrawMgr.AddInstance(unitName, 1);
         }
@@ -393,6 +393,126 @@ namespace Fyc.AnimationInstancing
         }
 
         private string drawNumTex = "5000";
+
+        #region Parent测试
+
+        [Title("Parent测试配置")]
+        public int parentCreateCount = 5;
+        public uint parentLayerMask = 1;
+        public int childCount = 10;                   // 每个 Parent 的子对象数量
+        public List<string> childUnitNames = new();   // 子对象的 unit 名称，不足时循环复用
+        public float childSpacing = 1f;               // 阵型间距（5个一排）
+        public float parentSpawnRange = 20f;          // Parent 随机分布范围（XZ 平面正负范围）
+        [Range(0f, 1f)]
+        public float removeRatio = 0.5f;
+
+        [Title("统计结果")]
+        public int expectedParentCount;
+        public int expectedChildCount;
+        public int actualParentCount;
+        public int actualChildCount;
+        public bool isVerified;
+
+        private List<int> _parentTestIndices = new();
+
+        [Button("创建所有Parent")]
+        public void CreateParents()
+        {
+            animationDrawMgr.Init("Assets/Res/Army/Export", true);
+            animationDrawMgr.SetCullingCamera(Camera.main);
+
+            for (int i = 0; i < parentCreateCount; i++)
+            {
+                var parentIndex = animationDrawMgr.AddParentData(parentLayerMask);
+                if (parentIndex < 0)
+                {
+                    Debug.LogError($"[ParentTest] 创建 Parent 失败（第{i}个）");
+                    continue;
+                }
+
+                var parentPos = new float3(
+                    UnityEngine.Random.Range(-parentSpawnRange, parentSpawnRange),
+                    0,
+                    UnityEngine.Random.Range(-parentSpawnRange, parentSpawnRange));
+                animationDrawMgr.SetParentPos(parentIndex, parentPos);
+
+                for (int j = 0; j < childCount; j++)
+                {
+                    var unitName = childUnitNames[j % childUnitNames.Count];
+                    var pos = new float3((j % 5) * childSpacing, 0, (j / 5) * childSpacing);
+                    var instanceIndex = animationDrawMgr.AddInstanceToParent(
+                        unitName, parentIndex, j, parentLayerMask, pos, float3.zero, 1f);
+                    if (instanceIndex < 0)
+                        Debug.LogWarning($"[ParentTest] Parent[{parentIndex}] 添加子对象失败: {unitName}");
+                }
+
+                _parentTestIndices.Add(parentIndex);
+            }
+            Debug.Log($"[ParentTest] 已创建 {_parentTestIndices.Count} 个 Parent，每个有 {childCount} 个子对象");
+        }
+
+        [Button("随机删除Parent")]
+        public void RandomRemoveParents()
+        {
+            if (_parentTestIndices.Count == 0)
+            {
+                Debug.LogWarning("[ParentTest] 没有可删除的 Parent");
+                return;
+            }
+
+            int removeCount = Mathf.FloorToInt(_parentTestIndices.Count * removeRatio);
+            if (removeCount <= 0)
+            {
+                Debug.LogWarning("[ParentTest] 删除数量为0，请调整 removeRatio");
+                return;
+            }
+
+            for (int i = _parentTestIndices.Count - 1; i > 0; i--)
+            {
+                int j = UnityEngine.Random.Range(0, i + 1);
+                (_parentTestIndices[i], _parentTestIndices[j]) = (_parentTestIndices[j], _parentTestIndices[i]);
+            }
+
+            var toRemove = _parentTestIndices.GetRange(0, removeCount);
+            foreach (var idx in toRemove)
+                animationDrawMgr.RemoveParentData(idx);
+
+            _parentTestIndices.RemoveRange(0, removeCount);
+            Debug.Log($"[ParentTest] 已删除 {removeCount} 个 Parent，剩余 {_parentTestIndices.Count} 个");
+        }
+
+        [Button("验证数量")]
+        public void VerifyParentCounts()
+        {
+            expectedParentCount = _parentTestIndices.Count;
+            expectedChildCount = expectedParentCount * childCount;
+            actualParentCount = animationDrawMgr.GetActiveParentCount();
+            actualChildCount = animationDrawMgr.GetActiveChildCount();
+            isVerified = expectedParentCount == actualParentCount && expectedChildCount == actualChildCount;
+
+            animationDrawMgr.GetActiveDataCount();
+            var result = isVerified ? "通过" : "失败";
+            Debug.Log($"[ParentTest] 验证结果：{result}\n" +
+                      $"  Parent  期望={expectedParentCount}  实际={actualParentCount}\n" +
+                      $"  子对象  期望={expectedChildCount}  实际={actualChildCount}");
+        }
+
+        [Button("清空所有Parent")]
+        public void ClearAllParents()
+        {
+            foreach (var idx in _parentTestIndices)
+                animationDrawMgr.RemoveParentData(idx);
+            _parentTestIndices.Clear();
+
+            expectedParentCount = 0;
+            expectedChildCount = 0;
+            actualParentCount = 0;
+            actualChildCount = 0;
+            isVerified = false;
+            Debug.Log("[ParentTest] 已清空所有 Parent");
+        }
+
+        #endregion
         FrameTiming[] timings = new FrameTiming[1];
         private float createTime = 0;
         private void OnGUI()

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using Sirenix.OdinInspector;
-using Temp;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
@@ -67,15 +66,31 @@ namespace Fyc.AnimationInstancing
             _defaultNum = defaultNum;
 
             animationDrawType = AnimationDrawType.Instance;
+
+            var shaderLevel = SystemInfo.graphicsShaderLevel;
+            var deviceType = SystemInfo.graphicsDeviceType;
+            var supportsCompute = SystemInfo.supportsComputeShaders;
+            var supportsIndirect = SystemInfo.supportsIndirectArgumentsBuffer;
+            var vertexBufferInputs = SystemInfo.maxComputeBufferInputsVertex;
+            Debug.Log($"[AnimationInstance] DeviceType: {deviceType}, ShaderLevel: {shaderLevel}, Version: {SystemInfo.graphicsDeviceVersion}");
+            Debug.Log($"[AnimationInstance] SupportsCompute: {supportsCompute}, SupportsIndirectBuffer: {supportsIndirect}, MaxVertexBufferInputs: {vertexBufferInputs}");
+
             //升级到2022要判定Indirect Draw
-            if (SystemInfo.supportsComputeShaders && SystemInfo.supportsIndirectArgumentsBuffer)
+            // Buff 模式 Vertex Shader 使用了 StructuredBuffer(SSBO)，必须确认 Vertex Stage 支持 SSBO（vertexBufferInputs > 0）
+            // Vulkan/Metal 原生支持，直接走 Buff 路径，不依赖 supportsIndirectArgumentsBuffer
+            // 部分 Android 驱动对该属性返回不准确，会导致判定失败（如红米K70 Ultra 天玑9300+）
+            if (supportsCompute && shaderLevel >= 45 && vertexBufferInputs > 0)
             {
-                bool isGLES31 = SystemInfo.graphicsDeviceType == GraphicsDeviceType.OpenGLES3 && 
+                bool isVulkan = deviceType == GraphicsDeviceType.Vulkan;
+                bool isMetal  = deviceType == GraphicsDeviceType.Metal;
+                // GLES 3.1 的 Indirect Draw 支持不稳定，单独排除
+                bool isGLES31 = deviceType == GraphicsDeviceType.OpenGLES3 &&
                                 SystemInfo.graphicsDeviceVersion.Contains("OpenGL ES 3.1");
-                if (!isGLES31)
+
+                if (isVulkan || isMetal || (!isGLES31 && supportsIndirect))
                     animationDrawType = AnimationDrawType.Buff;
             }
-
+            Debug.Log("[AnimationInstance] Current Animation Draw Type: " + Enum.GetName(typeof(AnimationDrawType), animationDrawType));
             if (needParentSupport)
             {
                 switch (animationDrawType)
@@ -154,6 +169,20 @@ namespace Fyc.AnimationInstancing
                 return _parentDataDefine.GetIsDirty(parentIndex);
             return false;
         }
+
+        public int GetParentTargetPathIndex(int parentIndex)
+        {
+            if (_parentDataDefine != null)
+                return _parentDataDefine.GetTargetPathIndex(parentIndex);
+            return -1;
+        }
+        
+        public float3 GetParentPathPos(int parentIndex, int targetIndex)
+        {
+            if (_parentDataDefine != null)
+                return _parentDataDefine.GetPathPos(parentIndex, targetIndex);
+            return float3.zero;
+        }
         
         public float3 GetParentPos(int parentIndex)
         {
@@ -167,6 +196,12 @@ namespace Fyc.AnimationInstancing
             if (_parentDataDefine != null)
                 return _parentDataDefine.GetRotationY(parentIndex);
             return 0f;
+        }
+
+        public void SetParentVisible(int parentIndex, bool isVisible)
+        {
+            if (_parentDataDefine != null)
+                _parentDataDefine.SetVisible(parentIndex, isVisible);
         }
 
         public void SetParentPos(int parentIndex, float3 pos)
@@ -204,6 +239,25 @@ namespace Fyc.AnimationInstancing
         {
             if (_parentDataDefine != null)
                 _parentDataDefine.RemoveParent(index);
+        }
+
+        public int GetActiveParentCount() => _parentDataDefine?.GetActiveParentCount() ?? 0;
+
+        public int GetActiveChildCount() => _parentDataDefine?.GetActiveChildCount() ?? 0;
+
+        public void GetActiveDataCount()
+        {
+            if (_drawInstanceData == null)
+                return;
+
+            for (int i = 0; i < _drawInstanceData.Length; i++)
+            {
+                var data = _drawInstanceData[i];
+                if (data != null)
+                {
+                    // Debug.LogError($"{data.GetName()} active count: {data.GetActiveCount()}");
+                }
+            }
         }
         
         //Parent Move
@@ -309,6 +363,11 @@ namespace Fyc.AnimationInstancing
             }
         }
 
+        public void RemoveChild(int parentId, int posId)
+        {
+            _parentDataDefine?.RemoveChild(parentId, posId);
+        }
+
         public void SetVisible(string unitName, int index, int visible)
         {
             if (_drawInstanceIndexDict.TryGetValue(unitName, out var dataIndex))
@@ -367,12 +426,14 @@ namespace Fyc.AnimationInstancing
         }
         private void Update()
         {
-            if (_drawInstanceDataCount == 0 || !_cullingCamera || !enableDraw || !_init)
+            if (_drawInstanceDataCount == 0 || !_cullingCamera || !_init)
                 return;
 
             UpdateBaseData();
             UpdateParentData();
-            
+
+            if (!enableDraw)
+                return;
             switch (animationDrawType)
             {
                 case AnimationDrawType.Instance:
@@ -516,25 +577,28 @@ namespace Fyc.AnimationInstancing
         
         private AnimationData LoadAnimationData(string unitName)
         {
-            var path = $"{_loadPath}/{unitName}.asset";
-
-            var request = AssetManager.LoadAssetDoNotDestroy(path, typeof(AnimationData));
-            if (request.isDone && request.asset is AnimationData)
-            {
-                return request.asset as AnimationData;
-            }
-            Debug.LogError($"[AnimationDrawMgr] Failed to load asset: {path}");
-            
-            return null;
+            return Resources.Load<AnimationData>(unitName);
+            // var path = $"{_loadPath}/{unitName}.asset";
+            //     
+            //
+            // var request = AssetManager.LoadAssetDoNotDestroy(path, typeof(AnimationData));
+            // if (request.isDone && request.asset is AnimationData)
+            // {
+            //     return request.asset as AnimationData;
+            // }
+            // Debug.LogError($"[AnimationDrawMgr] Failed to load asset: {path}");
+            //
+            // return null;
         }
 
         private void ReleaseData()
         {
             if (_drawInstanceData == null)
                 return;
-            foreach (var data in _drawInstanceData)
+
+            for (int i = 0; i < _drawInstanceDataCount; i++)
             {
-                data?.Dispose();
+                _drawInstanceData[i]?.Dispose();
             }
         }
         public void ClearData()

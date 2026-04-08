@@ -47,6 +47,7 @@
   <ItemGroup>
     <Compile Include="Assets\fyc-animationinstancing\Scripts\ToolTest.cs" />
     <Compile Include="Assets\fyc-animationinstancing\Scripts\Data\DataDefine.cs" />
+    <Compile Include="Assets\fyc-animationinstancing\Scripts\Data\ParentDataDefine.cs" />
     <Compile Include="Assets\fyc-animationinstancing\Scripts\Data\AnimationData.cs" />
     <Compile Include="Assets\fyc-animationinstancing\Scripts\TestAnimationBaker.cs" />
     <Compile Include="Assets\fyc-animationinstancing\Scripts\AnimationDrawMgr.cs" />
@@ -54,7 +55,6 @@
     <Compile Include="Assets\fyc-animationinstancing\Scripts\Data\AnimationJobDefine.cs" />
     <Compile Include="Assets\fyc-animationinstancing\Scripts\Data\PathData.cs" />
     <Compile Include="Assets\fyc-animationinstancing\Scripts\Data\JobUtils.cs" />
-    <Compile Include="Assets\fyc-animationinstancing\Scripts\Data\ParentDateDefine.cs" />
     <Compile Include="Assets\fyc-animationinstancing\Scripts\AnimationDrawTest.cs" />
     <Compile Include="Assets\fyc-animationinstancing\Scripts\ShaderIds.cs" />
     <Compile Include="Assets\fyc-animationinstancing\Scripts\Utils.cs" />
@@ -739,6 +739,9 @@
     </Reference>
     <Reference Include="Unity.Mathematics">
       <HintPath>D:\Learn\GPUSkinProj\Library\ScriptAssemblies\Unity.Mathematics.dll</HintPath>
+    </Reference>
+    <Reference Include="Unity.Burst">
+      <HintPath>D:\Learn\GPUSkinProj\Library\ScriptAssemblies\Unity.Burst.dll</HintPath>
     </Reference>
   </ItemGroup>
   <ItemGroup>

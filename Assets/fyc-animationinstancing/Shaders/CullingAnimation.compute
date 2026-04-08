@@ -1,4 +1,4 @@
-// #pragma kernel CSCulling
+#pragma kernel CSCullingMotion
 #pragma kernel CSCullingAndAnimation
 
 #include "ShaderLibs/Matrix.hlsl"
@@ -12,7 +12,7 @@ struct AnimationSaveData
     int AnimationTexIndex;
     int TotalFrame;
     int Fps;
-    bool RootMotion;
+    int RootMotion;
     int WrapMode;
 };
 
@@ -76,47 +76,8 @@ uint _LayerMask;
 int _CullingType;
 uint _InstanceCount;
 
-//TODO Calculate Move Or Rotation
-// [numthreads(64, 1, 1)] 
-// void CSCulling(uint3 id : SV_DispatchThreadID)
-// {
-//     uint index = id.x;
-//     FrameData data = _FrameData[index];
-//     if (data.Enable == 0)
-//         return;
-//     
-//     // radius 1
-//     bool visible = true;
-//
-//     for (uint i = 0; i < 6; i++)
-//     {
-//         if (dot(_Planes[i].xyz, data.Position) + _Planes[i].w < - 1.0)
-//         {
-//             visible = false;
-//             break;
-//         }
-//     }
-//     if (visible)
-//     {
-//         _OutFrameData.Append(data);
-//     }
-// }
-
-
-[numthreads(64, 1, 1)]
-void CSCullingAndAnimation(uint3 id : SV_DispatchThreadID)
+inline void DoMotionMove(inout MotionData motion)
 {
-    uint index = id.x;
-    
-    if (index >= _InstanceCount)
-        return;
-    //Do Motion
-    //Move or Rotation
-    MotionData motion = _MotionData[index];
-
-    if (motion.enable == 0)
-        return;
-    
     if (motion.MoveSpeed > 0.01)
     {
         float3 targetPos = motion.TargetPos;
@@ -161,8 +122,11 @@ void CSCullingAndAnimation(uint3 id : SV_DispatchThreadID)
         else
             motion.Position += step * motion.MoveDirection;
     }
+}
 
-    if (abs(motion.RotateYSpeed) > 0.01)
+inline void DoMotionRotate(inout MotionData motion)
+{
+    if (motion.RotateYSpeed > 0.01)
     {
         float targetY = 0;
         bool useFinal = false;
@@ -177,7 +141,7 @@ void CSCullingAndAnimation(uint3 id : SV_DispatchThreadID)
             motion.RotateYSpeed = 0;
 
         // motion.DebugTargetY = targetY;
-        if (abs(motion.RotateYSpeed) > 0.01)
+        if (motion.RotateYSpeed > 0.01)
         {
             float deltaAngle = GetDeltaAngle(motion.Rotation.y, targetY);
             float step = motion.RotateYSpeed * _DeltaTime;
@@ -196,10 +160,63 @@ void CSCullingAndAnimation(uint3 id : SV_DispatchThreadID)
                 motion.Rotation.y += sign(deltaAngle) * step;
         }
     }
+}
 
+[numthreads(64, 1, 1)]
+void CSCullingMotion(uint3 id: SV_DispatchThreadID)
+{
+    uint index = id.x;
+    
+    if (index >= _InstanceCount)
+        return;
+    //Do Motion
+    //Move or Rotation
+    MotionData motion = _MotionData[index];
+
+    if (motion.enable == 0)
+        return;
+    
+    DoMotionMove(motion);
+    DoMotionRotate(motion);
+
+    if ((_LayerMask & motion.LayerMask) == 0 || motion.Visible == 0)
+    {
+        motion.IsCull = 1;
+        _MotionData[index] = motion;
+        return;
+    }
+    // radius 1
+
+    for (uint i = 0; i < 6; i++)
+    {
+        if (dot(_Planes[i].xyz, motion.Position) + _Planes[i].w < - 1.0)
+        {
+            motion.IsCull = 1;
+            _MotionData[index] = motion;
+            return;
+        }
+    }
     motion.IsCull = 0;
     _MotionData[index] = motion;
+}
 
+
+[numthreads(64, 1, 1)]
+void CSCullingAndAnimation(uint3 id : SV_DispatchThreadID)
+{
+    uint index = id.x;
+    
+    if (index >= _InstanceCount)
+        return;
+    //Do Motion
+    //Move or Rotation
+    MotionData motion = _MotionData[index];
+
+    if (motion.enable == 0)
+        return;
+
+    DoMotionMove(motion);
+    DoMotionRotate(motion);
     float3 positon = motion.Position;
     float3 rotation = motion.Rotation;
     float scale = motion.Scale;
@@ -210,8 +227,6 @@ void CSCullingAndAnimation(uint3 id : SV_DispatchThreadID)
         MotionData parentMotion = _ParentMotionData[motion.ParentIndex];
         if ((_LayerMask & parentMotion.LayerMask) == 0 || parentMotion.Visible == 0 || parentMotion.IsCull == 1)
         {
-            motion.IsCull = 1;
-            _MotionData[index] = motion;
             return;
         }
         parentMotion.Position.y = 0;
@@ -224,32 +239,26 @@ void CSCullingAndAnimation(uint3 id : SV_DispatchThreadID)
     
     if ((_LayerMask & motion.LayerMask) == 0 || motion.Visible == 0)
     {
-        motion.IsCull = 1;
-        _MotionData[index] = motion;
+        // motion.IsCull = 1;
+        // _MotionData[index] = motion;
         return;
     }
     
     // radius 1
-
     for (uint i = 0; i < 6; i++)
     {
         if (dot(_Planes[i].xyz, positon) + _Planes[i].w < - 1.0)
         {
-            motion.IsCull = 1;
-            _MotionData[index] = motion;
+            // motion.IsCull = 1;
+            // _MotionData[index] = motion;
             return;
         }
     }
-
-    if (_CullingType == 1)
-        //No Animation Changed
-        return;
-
     FrameData data = _FrameData[index];
     AnimationSaveData infoData = _InfoData[data.CurAniIndex];
     DrawFrameData drawData;
     
-    if (motion.MoveSpeed < 0.001 && abs(motion.RotateYSpeed) < 0.001)
+    if (motion.MoveSpeed < 0.01 && motion.RotateYSpeed < 0.01)
     {
         if (data.ResetAniIndex >= 0)
         {
@@ -263,9 +272,11 @@ void CSCullingAndAnimation(uint3 id : SV_DispatchThreadID)
             motion.Rotation.y = 0;
             motion.RotateYTarget = PositiveInfinity;
             motion.RotateYFinal = PositiveInfinity;
-            _MotionData[index] = motion; 
         }
     }
+
+    motion.IsCull = 0;
+    _MotionData[index] = motion;
     
     drawData.WorldMatrix = CreateTRSMatrix(positon, rotation, scale);
 

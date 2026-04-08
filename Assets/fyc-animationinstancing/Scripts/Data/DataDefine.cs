@@ -82,7 +82,6 @@ namespace Fyc.AnimationInstancing
 
         public void StopMove()
         {
-            PathData.Instance.RemovePos(PathIndex);
             MoveSpeed = 0;
             MoveDirection = float3.zero;
             PathIndex = -1; 
@@ -151,6 +150,8 @@ namespace Fyc.AnimationInstancing
         private ComputeBuffer _motionDataBuffer;
         private ComputeBuffer _aniInfoBuffer;
         
+        private int[] _pathIndexData;
+        
         //Cache
         private MotionData[] _motionDataReadbackCache;
         private int _motionDataReadbackFrame = -1;
@@ -182,6 +183,7 @@ namespace Fyc.AnimationInstancing
             
             _tempFrameDataAry = new FrameData[1];
             _tempMotionDataAry = new MotionData[1];
+            _pathIndexData = new int[defaultNum];
             //create bone texture
             (int width, int height) = mainData.GetTextureWidthAndHeight();
             //SetMaterial Params
@@ -197,7 +199,7 @@ namespace Fyc.AnimationInstancing
             AniInfoData = new NativeArray<AnimationSaveData>(mainData.animationData.Length, Allocator.Persistent);
             AniInfoData.CopyFrom(mainData.animationData);
 
-            TotalFrames = new NativeArray<FrameData>(defaultNum, Allocator.Persistent);
+            // TotalFrames = new NativeArray<FrameData>(defaultNum, Allocator.Persistent);
             AvaSlots = new(defaultNum);
             //Kernel
             _cullingAndAnimationKernel = _animationDrawShader.FindKernel(ComputeShaderIds.ComputeCullingAnimationKernel);
@@ -207,7 +209,7 @@ namespace Fyc.AnimationInstancing
             _aniInfoBuffer = new ComputeBuffer(mainData.animationData.Length, Marshal.SizeOf<AnimationSaveData>());
             _aniInfoBuffer.SetData(AniInfoData);
             _totalFramesBuffer = new ComputeBuffer(defaultNum, Marshal.SizeOf<FrameData>());
-            _totalFramesBuffer.SetData(TotalFrames);
+            // _totalFramesBuffer.SetData(TotalFrames);
             _avaFramesBuffer = new ComputeBuffer(defaultNum, Marshal.SizeOf<DrawFrameData>(), ComputeBufferType.Append);
             _motionDataBuffer = new ComputeBuffer(defaultNum, Marshal.SizeOf<MotionData>());
 
@@ -227,7 +229,7 @@ namespace Fyc.AnimationInstancing
             }
 
             AniInfoData.Dispose();
-            TotalFrames.Dispose();
+            // TotalFrames.Dispose();
             
             //set path ary data init
             PathData.Instance.SetComputeShaderData(_animationDrawShader, _cullingAndAnimationKernel);
@@ -240,6 +242,7 @@ namespace Fyc.AnimationInstancing
             DrawMesh = mainData.mainMesh;
             DrawMaterial = mainData.mainMaterial;
             MaxCount = defaultNum;
+            _pathIndexData = new int[defaultNum];
             DrawMaterial.DisableKeyword(ShaderIds.IndirectKeyWord);
             DrawMaterial.EnableKeyword(ShaderIds.InstanceKeyWord);
             //create bone texture
@@ -275,7 +278,16 @@ namespace Fyc.AnimationInstancing
                 InfoIndexes[info.animationNameHash] = i;
             }
         }
-        
+
+        public string GetName()
+        {
+            return AniData?.name;
+        }
+
+        public string GetActiveCount()
+        {
+            return $"{InstancingCount}_{AvaSlots.Count}";
+        }
         public void SetBoneTexture(Texture2D texture)
         {
             DrawMaterial.SetTexture(ShaderIds.BoneTexture, texture);
@@ -294,6 +306,7 @@ namespace Fyc.AnimationInstancing
             EnsureFrameDataWriteCache();
             _frameDataWriteCache[index] = frameData;
             _hasPendingFrameWrite = true;
+            InvalidateFrameDataReadback();
         }
 
         private ref MotionData GetMotionDataBuff(int index)
@@ -411,6 +424,7 @@ namespace Fyc.AnimationInstancing
             if (AvaSlots.Count > 0)
             {
                 index = AvaSlots.Pop();
+                _pathIndexData[index] = -1;
                 var frameData = GetFrameDataBuff(index);
                 frameData.Active();
                 SetFrameDataBuff(index, ref frameData);
@@ -432,7 +446,7 @@ namespace Fyc.AnimationInstancing
             var initMotionData = GetMotionDataBuff(InstancingCount);
             initMotionData.Reset(layerMask);
             SetMotionDataBuff(InstancingCount, ref initMotionData);
-            
+            _pathIndexData[InstancingCount] = -1;
             index = InstancingCount;
             InstancingCount++;
             return index;
@@ -443,6 +457,7 @@ namespace Fyc.AnimationInstancing
             if (AvaSlots.Count > 0)
             {
                 index = AvaSlots.Pop();
+                _pathIndexData[index] = -1;
                 var data = TotalFrames[index];
                 data.Active();
                 TotalFrames[index] = data;
@@ -476,6 +491,7 @@ namespace Fyc.AnimationInstancing
                 var motionData = MotionDataAry[InstancingCount];
                 motionData.Reset(layerMask);
                 MotionDataAry[InstancingCount] = motionData;
+                _pathIndexData[InstancingCount] = -1;
                 index = InstancingCount;
                 InstancingCount++;
             }
@@ -500,6 +516,8 @@ namespace Fyc.AnimationInstancing
         public void RemoveInstanceBuffer(int index)
         {
             var frameData = GetFrameDataBuff(index);
+            if (frameData.Enable == 0)
+                return;
             frameData.Enable = 0;
             SetFrameDataBuff(index, ref frameData);
             AvaSlots.Push(index);
@@ -507,26 +525,36 @@ namespace Fyc.AnimationInstancing
             //remove path
             var motionData = GetMotionDataBuff(index);
             motionData.Enable = 0;
+            motionData.ParentIndex = -1;
             SetMotionDataBuff(index, ref motionData);
-            if (motionData.PathIndex >= 0)
-                PathData.Instance.RemovePos(motionData.PathIndex);
+            
+            ResetPath(index);
         }
 
         public void RemoveInstanceData(int index)
         {
             var instanceData = TotalFrames[index];
+            if (instanceData.Enable == 0)
+                return;
             instanceData.Enable = 0;
             TotalFrames[index] = instanceData;
             AvaSlots.Push(index);
             
             //remove path
             var motionData = MotionDataAry[index];
-            if (motionData.PathIndex >= 0)
-                PathData.Instance.RemovePos(motionData.PathIndex);
+            if (_pathIndexData[index] >= 0)
+                PathData.Instance.RemovePos(_pathIndexData[index]);
             motionData.Enable = 0;
+            motionData.ParentIndex = -1;
             MotionDataAry[index] = motionData;
         }
-        
+
+        private void ResetPath(int index, int setPath = -1)
+        {
+            if (_pathIndexData[index] >= 0)
+                PathData.Instance.RemovePos(_pathIndexData[index]);
+            _pathIndexData[index] = setPath;
+        }
         //visible 
         public void SetVisible(int index, int visible)
         {
@@ -569,8 +597,7 @@ namespace Fyc.AnimationInstancing
             {
                 case AnimationDrawType.Instance:
                     var data = MotionDataAry[index];
-                    if (data.PathIndex >= 0)
-                        PathData.Instance.RemovePos(data.PathIndex);
+                    ResetPath(index);
                     data.PathIndex = -1;
                     data.CurPathIndex = 0;
                     targetPos.y = data.Position.y;
@@ -591,8 +618,7 @@ namespace Fyc.AnimationInstancing
                     break;
                 case AnimationDrawType.Buff:
                     data = GetMotionDataBuff(index);
-                    if (data.PathIndex >= 0)
-                        PathData.Instance.RemovePos(data.PathIndex);
+                    ResetPath(index);
                     targetPos.y = data.Position.y;
                     data.PathIndex = -1;
                     data.CurPathIndex = 0;
@@ -626,10 +652,9 @@ namespace Fyc.AnimationInstancing
                 case AnimationDrawType.Instance:
                     
                     var data = MotionDataAry[index];
-                    if (data.PathIndex >= 0)
-                        PathData.Instance.RemovePos(data.PathIndex);
-                    
+                 
                     var pathIndex = PathData.Instance.AddInstancePoses(targetPos);
+                    ResetPath(index, pathIndex);
                     data.PathIndex = pathIndex + targetPos.Length - 1;
                     data.CurPathIndex = pathIndex;
                     firstPos.y = data.Position.y;
@@ -644,10 +669,9 @@ namespace Fyc.AnimationInstancing
                     break;
                 case AnimationDrawType.Buff:
                     data = GetMotionDataBuff(index);
-                    if (data.PathIndex >= 0)
-                        PathData.Instance.RemovePos(data.PathIndex);
+         
                     pathIndex = PathData.Instance.AddBufferPoses(targetPos);
-                    
+                    ResetPath(index, pathIndex);
                     data.PathIndex = pathIndex + targetPos.Length - 1;
                     data.CurPathIndex = pathIndex;
                     data.MoveSpeed = moveSpeed;
@@ -673,12 +697,14 @@ namespace Fyc.AnimationInstancing
             {
                 case AnimationDrawType.Instance:
                     var data = MotionDataAry[index];
+                    ResetPath(index);
                     data.MoveSpeed = speed;
                     data.MoveDirection = math.normalize(dir);
                     MotionDataAry[index] = data;
                     break;
                 case AnimationDrawType.Buff:
                     data = GetMotionDataBuff(index);
+                    ResetPath(index);
                     data.MoveSpeed = speed;
                     data.MoveDirection = math.normalize(dir);
                     SetMotionDataBuff(index, ref data);
@@ -698,11 +724,13 @@ namespace Fyc.AnimationInstancing
             {
                 case AnimationDrawType.Instance:
                     var data = MotionDataAry[index];
+                    ResetPath(index);
                     data.StopMove();
                     MotionDataAry[index] = data;
                     break;
                 case AnimationDrawType.Buff:
                     data = GetMotionDataBuff(index);
+                    ResetPath(index);
                     data.StopMove();
                     SetMotionDataBuff(index, ref data);
                     break;
@@ -813,7 +841,7 @@ namespace Fyc.AnimationInstancing
                     return true;
                 case AnimationDrawType.Buff:
                     data = GetMotionDataBuff(index);
-                    pos = data.TargetPos;
+                    pos = data.Position;
                     return true;
                 default:
                     pos = float3.zero;
@@ -1005,7 +1033,6 @@ namespace Fyc.AnimationInstancing
             _animationDrawShader.SetBuffer(_cullingAndAnimationKernel, ComputeShaderIds.TotalBufferName, _totalFramesBuffer);
             _animationDrawShader.SetBuffer(_cullingAndAnimationKernel, ComputeShaderIds.AvaBufferName, _avaFramesBuffer);
             _animationDrawShader.SetBuffer(_cullingAndAnimationKernel, ComputeShaderIds.MotionBufferName, _motionDataBuffer);
-            _animationDrawShader.SetInt(ComputeShaderIds.CullingType, 0);
             _animationDrawShader.SetInt(ComputeShaderIds.InstanceCount, InstancingCount);
             _avaFramesBuffer.SetCounterValue(0);
             
@@ -1015,7 +1042,8 @@ namespace Fyc.AnimationInstancing
             InvalidateMotionDataReadback();
             InvalidateFrameDataReadback();
             
-            _motionDataBuffer.GetData(_motionDataReadbackCache, 0, 0, InstancingCount);
+            // _motionDataBuffer.GetData(_motionDataReadbackCache, 0, 0, InstancingCount);
+            // _totalFramesBuffer.GetData(_frameDataReadbackCache, 0, 0, InstancingCount);
             //Debug
             // var countData = new uint[5];
             // _argsBuffer.GetData(countData, 0, 0, 5);
@@ -1202,28 +1230,9 @@ namespace Fyc.AnimationInstancing
         #endregion
         public void ClearPath()
         {
-            switch (_drawType)
+            for (int i = 0; i < InstancingCount; i++)
             {
-                case AnimationDrawType.Instance:
-                    for (int i = 0; i < MotionDataAry.Length; i++)
-                    {
-                        var data = MotionDataAry[i];
-                        if (data.Enable == 1)
-                            PathData.Instance.RemovePos(data.PathIndex);
-                    }
-                    break;
-                case AnimationDrawType.Buff:
-                    var count = _motionDataBuffer.count;
-                    var tempMotionData = new MotionData[count];
-                    _motionDataBuffer.GetData(tempMotionData, 0, 0, count);
-                    foreach (var m in tempMotionData)
-                    {
-                        if (m.Enable == 1 )
-                            PathData.Instance.RemovePos(m.PathIndex);
-                    }
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException();
+                ResetPath(i);
             }
         }
 
@@ -1289,6 +1298,6 @@ namespace Fyc.AnimationInstancing
     {
         public static int[] StandardTextureSize = { 64, 128, 256, 512, 1024 };
 
-        public const string AnimationTextureDataPath = "/DataExport/AnimationInstancingAnimationTextureData/";
+        // public const string AnimationTextureDataPath = "/DataExport/AnimationInstancingAnimationTextureData/";
     }
 }

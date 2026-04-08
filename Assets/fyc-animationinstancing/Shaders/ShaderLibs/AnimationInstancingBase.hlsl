@@ -6,10 +6,10 @@
 #include "UnPacked.hlsl"
 
 TEXTURE2D(_BoneTexture); SAMPLER(sampler_BoneTexture);
-real _BoneTextureBlockWidth;
-real _BoneTextureBlockHeight;
-real _BoneTextureWidth;
-real _BoneTextureHeight;
+float _BoneTextureBlockWidth;
+float _BoneTextureBlockHeight;
+float _BoneTextureWidth;
+float _BoneTextureHeight;
 
 #if (SHADER_TARGET < 30 || SHADER_API_GLES)
 uniform float _FrameIndex;
@@ -27,10 +27,10 @@ UNITY_INSTANCING_BUFFER_END(Props)
 #endif
 
 
-real4x4 LoadMatFromTexture(uint frameIndex, uint boneIndex)
+float4x4 LoadMatFromTexture(uint frameIndex, uint boneIndex)
 {
     float rcpBoneTextureBlockWidth = rcp(_BoneTextureBlockWidth);
-    
+
     uint blockCount = _BoneTextureWidth * rcpBoneTextureBlockWidth;
 
     int2 uv;
@@ -46,7 +46,7 @@ real4x4 LoadMatFromTexture(uint frameIndex, uint boneIndex)
     float2 uvFrame;
     uvFrame.x = uv.x * offset;
     uvFrame.y = uv.y * rcp((float)_BoneTextureHeight);
-    real4 uvf = real4(uvFrame, 0, 0);
+    float4 uvf = float4(uvFrame, 0, 0);
 
     float4 c = SAMPLE_TEXTURE2D_LOD(_BoneTexture, sampler_BoneTexture, uvf.xy, 0);
     // float3 r1 = unpack111110(c.r);

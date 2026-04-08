@@ -28,7 +28,7 @@ namespace Fyc.AnimationInstancing
         private ComputeBuffer _pathBuffer;
         private int _lastIndex;
         private Queue<int> _freeIndexes;
-        private bool _computeSet;
+        // private bool _computeSet;
 
         public PathData()
         {
@@ -36,10 +36,17 @@ namespace Fyc.AnimationInstancing
             _freeIndexes = new(512);
             _lastIndex = 0;
         }
-        
+
+        public float3 GetPathPos(int index)
+        {
+            if (!_pathAry.IsCreated)
+                return float3.zero;
+
+            return _pathAry[index];
+        }
         public ref NativeArray<float3> GetPathAry()
         {
-            if ( !_pathAry.IsCreated && _computeSet)
+            if ( !_pathAry.IsCreated)
             {
                 //Test Status has been disposed
                 _pathAry = new NativeArray<float3>(NumOfAll, Allocator.Persistent);
@@ -53,14 +60,22 @@ namespace Fyc.AnimationInstancing
         //type is compute Shader
         public void SetComputeShaderData(ComputeShader shader, int kernel)
         {
-            if (_computeSet)
-                return;
-            _computeSet = true;
-            _pathBuffer = new ComputeBuffer(NumOfAll, 12); //float * 3
-            _pathBuffer.SetData(_pathAry);
+            // if (_computeSet)
+            //     return;
+            // _computeSet = true;
+            if (_pathBuffer == null || !_pathBuffer.IsValid())
+            {
+                _pathBuffer = new ComputeBuffer(NumOfAll, 12); //float * 3
+                _pathBuffer.SetData(_pathAry);
+                // _pathAry.Dispose();
+            }
+            // _pathBuffer = new ComputeBuffer(NumOfAll, 12); //float * 3
+            // _pathBuffer.SetData(_pathAry);
             shader.SetBuffer(kernel, ComputeShaderIds.PathAryName, _pathBuffer);
-            _pathAry.Dispose();
+            // _pathAry.Dispose();
         }
+        
+        
 
         public int AddBufferPoses(Vector3[] poses)
         {
@@ -79,6 +94,11 @@ namespace Fyc.AnimationInstancing
             var length = poses.Length;
             _pathBuffer.SetData(poses, 0, resultIndex, length);
 
+            for (int i = 0; i < length; i++)
+            {
+                _pathAry[resultIndex + i] = poses[i];
+            }
+            
             if (fromLast)
             {
                 if (NumOfAll - _lastIndex < NumOfEachUnit)
@@ -136,7 +156,7 @@ namespace Fyc.AnimationInstancing
 
         public void Dispose()
         {
-            _computeSet = false;
+            // _computeSet = false;
             if (_pathAry.IsCreated)
                 _pathAry.Dispose();
             _pathBuffer?.Dispose();

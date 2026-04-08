@@ -195,6 +195,7 @@ namespace Fyc.AnimationInstancing
             
             var triangleStart = 0;
             var vertexStart = 0;
+            var boneStartIndex = 0;
             
             for (int i = 0; i < skinnedMeshRenderers.Length; i++)
             {
@@ -202,6 +203,7 @@ namespace Fyc.AnimationInstancing
 
                 if (!m)
                     continue;
+                
                 for (int j = 0; j < m.vertexCount; j++)
                 {
                     var data = vertexDataAry[j + vertexStart];
@@ -215,7 +217,7 @@ namespace Fyc.AnimationInstancing
                         (half)boneWeight.weight2, (half)boneWeight.weight3);
                     
                     Debug.Assert(weight.x > 0.0f);
-                    half4 boneIndex = new half4((half)boneWeight.boneIndex0, (half)boneWeight.boneIndex1, (half)boneWeight.boneIndex2, (half)boneWeight.boneIndex3);
+                    half4 boneIndex = new half4((half)(boneWeight.boneIndex0 + boneStartIndex), (half)(boneWeight.boneIndex1 + boneStartIndex), (half)(boneWeight.boneIndex2 + boneStartIndex), (half)(boneWeight.boneIndex3 + boneStartIndex));
                     Debug.Assert(boneIndex.x >= 0);
                     switch (bonePerVertex)
                     {
@@ -252,6 +254,7 @@ namespace Fyc.AnimationInstancing
                 }
                 triangleStart += m.triangles.Length;
                 vertexStart += m.vertexCount;
+                boneStartIndex += skinnedMeshRenderers[i].bones.Length;
             }
             
             meshData.subMeshCount = 1;
@@ -259,7 +262,7 @@ namespace Fyc.AnimationInstancing
             
             //Save Mesh To Disk
 
-            var savePath = $"Assets{DataDefine.AnimationTextureDataPath}/ME_{_prefabToBake.name}.mesh";
+            var savePath = $"{SavePath}/ME_{_prefabToBake.name}.mesh";
 
             _currentMesh = AssetDatabase.LoadAssetAtPath<Mesh>(savePath);
             if (_currentMesh)
@@ -280,7 +283,7 @@ namespace Fyc.AnimationInstancing
 
         private void GenerateMaterial(SkinnedMeshRenderer[] skinnedMeshRenderers)
         {
-            var savePath = $"Assets{DataDefine.AnimationTextureDataPath}/M_{_prefabToBake.name}.mat";
+            var savePath = $"{SavePath}/M_{_prefabToBake.name}.mat";
 
             Material originMaterial = null;
 
@@ -418,7 +421,7 @@ namespace Fyc.AnimationInstancing
 
         private void SaveAnimationInfo(string animationName)
         {
-            var path = $"Assets{DataDefine.AnimationTextureDataPath}";
+            var path = $"{SavePath}";
             if (!Directory.Exists(path))
                 Directory.CreateDirectory(path);
             
@@ -435,7 +438,7 @@ namespace Fyc.AnimationInstancing
                 data.animationData[i].animationTexIndex = info.TextureIndex;
                 data.animationData[i].totalFrame = info.TotalFrame;
                 data.animationData[i].fps = info.Fps;
-                data.animationData[i].rootMotion = info.RootMotion;
+                data.animationData[i].rootMotion = info.RootMotion ? 1 : 0;
                 data.animationData[i].wrapMode = (int)(info.WrapMode);
                 // data.animationData[i].velocities = info.Velocities;
                 // data.animationData[i].angularVelocities = info.AngularVelocities;

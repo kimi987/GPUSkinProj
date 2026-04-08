@@ -12,7 +12,7 @@ namespace Fyc.AnimationInstancing
         public int animationTexIndex;
         public int totalFrame;
         public int fps;
-        public bool rootMotion;
+        public int rootMotion;
         public int wrapMode;
         // public float3[] velocities;
         // public float3[] angularVelocities;
@@ -82,7 +82,7 @@ namespace Fyc.AnimationInstancing
         /// <returns></returns>
         public static AnimationData GetOrCreateAnimationData(string path, string saveName)
         {
-            var assetPath = $"{path}{saveName}.asset";
+            var assetPath = $"{path}/{saveName}.asset";
 
             var data = UnityEditor.AssetDatabase.LoadAssetAtPath<AnimationData>(assetPath);
 

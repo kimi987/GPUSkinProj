@@ -474,8 +474,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 961739749}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.18403327, y: 0.006347371, z: -0.0011884513, w: 0.9828989}
-  m_LocalPosition: {x: 5.22, y: 3.39, z: -7.24}
+  m_LocalRotation: {x: 0.0028391748, y: 0.9854779, z: -0.1689708, w: 0.016558515}
+  m_LocalPosition: {x: 4.4737225, y: 0.26611954, z: 5.2425113}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -540,17 +540,32 @@ MonoBehaviour:
     PrefabModificationsReferencedUnityObjects: []
     PrefabModifications: []
     SerializationNodes: []
-  data: {fileID: 11400000, guid: 15ecb510bdabc55458bfda7e2727ddf0, type: 2}
+  data: {fileID: 11400000, guid: db038debaef003b4a97b3763d2405cf2, type: 2}
   drawCamera: {fileID: 961739752}
   drawCount: 50000
   rotationY: 0
   scale: 0
   animationSpeed: 1
+  movePoses: []
   textAsset: {fileID: 4900000, guid: 31d4e89b92e834448accc8c0c491766a, type: 3}
   oldTexture: {fileID: 0}
   newTexture: {fileID: 340140189}
   computeShader: {fileID: 7200000, guid: 06536cadf2784190969ecc1b2aa9f33e, type: 3}
   activeBufferDraw: 1
+  animationDrawMgr: {fileID: 0}
+  currentDrawLayer: 4294967295
+  parentCreateCount: 5
+  parentLayerMask: 1
+  childCount: 10
+  childUnitNames: []
+  childSpacing: 1
+  parentSpawnRange: 20
+  removeRatio: 0.5
+  expectedParentCount: 0
+  expectedChildCount: 0
+  actualParentCount: 0
+  actualChildCount: 0
+  isVerified: 0
 --- !u!1 &1964467422
 GameObject:
   m_ObjectHideFlags: 0

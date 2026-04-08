@@ -19,6 +19,7 @@ namespace Fyc.AnimationInstancing
 
     public class ComputeShaderIds
     {
+        public static string ComputeCullingMotionKernel = "CSCullingMotion";
         public static string ComputeCullingAnimationKernel = "CSCullingAndAnimation";
 
         public static string TotalBufferName = "_FrameData";

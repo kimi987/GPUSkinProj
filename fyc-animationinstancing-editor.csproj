@@ -46,6 +46,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Assets\fyc-animationinstancing\Editor\GenerateObjectInfo.cs" />
+    <Compile Include="Assets\fyc-animationinstancing\Editor\AnimationExportTools.cs" />
     <Compile Include="Assets\fyc-animationinstancing\Editor\AnimationBakeInfo.cs" />
     <Compile Include="Assets\fyc-animationinstancing\Editor\AnimationGenerator.cs" />
     <Compile Include="Assets\fyc-animationinstancing\Editor\AnimationBakeWindow.cs" />
