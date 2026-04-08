@@ -43,6 +43,9 @@ namespace Fyc.AnimationInstancing
         [SerializeField]
         public TextureSaveData[] textureData;
 
+        [SerializeField]
+        public Texture2D boneTexture;
+
         public ref AnimationSaveData GetAnimation(int index)
         {
             return ref animationData[index];
@@ -50,6 +53,9 @@ namespace Fyc.AnimationInstancing
 
         public (int, int) GetTextureWidthAndHeight()
         {
+            if (boneTexture != null)
+                return (boneTexture.width, boneTexture.height);
+
             if (textureData == null || textureData.Length == 0)
             {
                 Debug.LogError("[Error] GetTextureWidthAndHeight fail, textureData is empty");
@@ -58,15 +64,20 @@ namespace Fyc.AnimationInstancing
 
             return (textureData[0].textureWidth, textureData[0].textureHeight);
         }
+
         public Texture2D CreateBoneTexture()
         {
+            // 优先使用已保存的BoneTexture
+            if (boneTexture != null)
+                return boneTexture;
+
             if (textureData == null || textureData.Length == 0)
             {
                 Debug.LogError("[Error] CreateBoneTexture fail, textureData is empty");
                 return null;
             }
             //暂时只支持一张
-            var texture = new Texture2D(textureData[0].textureWidth, textureData[0].textureHeight, TextureFormat.RGBAFloat, false);
+            var texture = new Texture2D(textureData[0].textureWidth, textureData[0].textureHeight, TextureFormat.RGBAFloat, false, true);
             texture.name = "BoneTexture";
             texture.LoadRawTextureData(textureData[0].textureData);
             texture.filterMode = FilterMode.Point;
@@ -74,6 +85,35 @@ namespace Fyc.AnimationInstancing
             return texture;
         }
 #if UNITY_EDITOR
+        /// <summary>
+        /// 将BoneTexture保存为子资产，运行时可直接加载，无需从textureData重建
+        /// </summary>
+        [Button]
+        public void SaveBoneTexture()
+        {
+            if (textureData == null || textureData.Length == 0)
+            {
+                Debug.LogError("[Error] SaveBoneTexture fail, textureData is empty");
+                return;
+            }
+
+            var texture = new Texture2D(textureData[0].textureWidth, textureData[0].textureHeight, TextureFormat.RGBAFloat, false, true);
+            texture.name = "BoneTexture";
+            texture.LoadRawTextureData(textureData[0].textureData);
+            texture.filterMode = FilterMode.Point;
+            texture.Apply();
+
+            // 移除旧的子资产
+            if (boneTexture != null)
+            {
+                UnityEditor.AssetDatabase.RemoveObjectFromAsset(boneTexture);
+            }
+
+            boneTexture = texture;
+            UnityEditor.AssetDatabase.AddObjectToAsset(texture, this);
+            UnityEditor.EditorUtility.SetDirty(this);
+            UnityEditor.AssetDatabase.SaveAssets();
+        }
         /// <summary>
         /// 创建或者更新已有的数据
         /// </summary>
