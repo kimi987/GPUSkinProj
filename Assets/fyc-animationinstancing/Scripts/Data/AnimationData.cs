@@ -43,9 +43,6 @@ namespace Fyc.AnimationInstancing
         [SerializeField]
         public TextureSaveData[] textureData;
 
-        [SerializeField]
-        public Texture2D boneTexture;
-
         public ref AnimationSaveData GetAnimation(int index)
         {
             return ref animationData[index];
@@ -53,9 +50,6 @@ namespace Fyc.AnimationInstancing
 
         public (int, int) GetTextureWidthAndHeight()
         {
-            if (boneTexture != null)
-                return (boneTexture.width, boneTexture.height);
-
             if (textureData == null || textureData.Length == 0)
             {
                 Debug.LogError("[Error] GetTextureWidthAndHeight fail, textureData is empty");
@@ -64,56 +58,43 @@ namespace Fyc.AnimationInstancing
 
             return (textureData[0].textureWidth, textureData[0].textureHeight);
         }
-
         public Texture2D CreateBoneTexture()
         {
-            // 优先使用已保存的BoneTexture
-            if (boneTexture != null)
-                return boneTexture;
-
             if (textureData == null || textureData.Length == 0)
             {
                 Debug.LogError("[Error] CreateBoneTexture fail, textureData is empty");
                 return null;
             }
-            //暂时只支持一张
-            var texture = new Texture2D(textureData[0].textureWidth, textureData[0].textureHeight, TextureFormat.RGBAFloat, false, true);
+
+            int w = textureData[0].textureWidth;
+            int h = textureData[0].textureHeight;
+            byte[] srcData = textureData[0].textureData;
+
+            // 原始数据是 RGBAHalf (64-bit/pixel) 格式序列化的
+            // 每骨骼 2 像素：pixel1=(pos.xyz, scale), pixel2=(rot.xyzw)
+            bool supported = SystemInfo.SupportsTextureFormat(TextureFormat.RGBAHalf);
+            if (!supported)
+            {
+                Debug.LogError($"[AnimationInstancing] TextureFormat.RGBAHalf is NOT supported on this device! " +
+                               $"GPU: {SystemInfo.graphicsDeviceName}, API: {SystemInfo.graphicsDeviceType}");
+            }
+
+            var texture = new Texture2D(w, h, TextureFormat.RGBAHalf, false);
             texture.name = "BoneTexture";
-            texture.LoadRawTextureData(textureData[0].textureData);
+            texture.LoadRawTextureData(srcData);
             texture.filterMode = FilterMode.Point;
-            texture.Apply();
+            texture.Apply(false, true); // updateMipmaps=false, makeNoLongerReadable=true
+
+            // 运行时验证：检查纹理实际格式是否与预期一致
+            if (texture.format != TextureFormat.RGBAHalf)
+            {
+                Debug.LogError($"[AnimationInstancing] BoneTexture format mismatch! " +
+                               $"Expected: RGBAHalf, Actual: {texture.format}. Animation will be broken.");
+            }
+
             return texture;
         }
 #if UNITY_EDITOR
-        /// <summary>
-        /// 将BoneTexture保存为子资产，运行时可直接加载，无需从textureData重建
-        /// </summary>
-        [Button]
-        public void SaveBoneTexture()
-        {
-            if (textureData == null || textureData.Length == 0)
-            {
-                Debug.LogError("[Error] SaveBoneTexture fail, textureData is empty");
-                return;
-            }
-
-            var texture = new Texture2D(textureData[0].textureWidth, textureData[0].textureHeight, TextureFormat.RGBAFloat, false, true);
-            texture.name = "BoneTexture";
-            texture.LoadRawTextureData(textureData[0].textureData);
-            texture.filterMode = FilterMode.Point;
-            texture.Apply();
-
-            // 移除旧的子资产
-            if (boneTexture != null)
-            {
-                UnityEditor.AssetDatabase.RemoveObjectFromAsset(boneTexture);
-            }
-
-            boneTexture = texture;
-            UnityEditor.AssetDatabase.AddObjectToAsset(texture, this);
-            UnityEditor.EditorUtility.SetDirty(this);
-            UnityEditor.AssetDatabase.SaveAssets();
-        }
         /// <summary>
         /// 创建或者更新已有的数据
         /// </summary>

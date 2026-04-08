@@ -138,7 +138,7 @@ namespace Fyc.AnimationInstancing
             Matrix4x4[] bindPose)
         {
             _boundCount = boneTransforms.Length;
-            _textureBlockWidth = 1;  //TODO 之后优化数据存储
+            _textureBlockWidth = 2;  // 每骨骼 2 像素 (pos+scale, rot)
             _textureBlockHeight = _boundCount;
 
             for (int i = 0; i < skinnedMeshRenderers.Length; i++)
@@ -589,7 +589,7 @@ namespace Fyc.AnimationInstancing
 
             _bakedBoneTexture = new Texture2D[count]; // Default to 1
             // var format = TextureFormat.RGBAHalf; // Test to RGBAFloat
-            var format = TextureFormat.RGBAFloat;
+            var format = TextureFormat.RGBAHalf;
             for (int i = 0; i < count; i++)
             {
                 _bakedBoneTexture[i] = new Texture2D(textureWidth, textureWidth, format, false);
@@ -608,12 +608,12 @@ namespace Fyc.AnimationInstancing
             if (bone != null)
             {
                 _boundCount = bone.Length;
-                blockWidth = 1; //TODO Compress to 1
+                blockWidth = 2; 
                 blockHeight = _boundCount;
             }
             else
             {
-                blockWidth = _textureBlockWidth; //TODO Compress to 1
+                blockWidth = _textureBlockWidth;
                 blockHeight = _textureBlockHeight;
             }
 
@@ -710,7 +710,7 @@ namespace Fyc.AnimationInstancing
                 }
                 Debug.Assert(pixely + _textureBlockHeight <= _bakedBoneTexture[textureIndex].height);
                 // var colors = Utils.Convert2Color(matrixData.BoneMatrix);
-                var colors = Utils.ConvertToPosRotColor(matrixData.BoneMatrix);
+                var colors = Utils.ConvertToPosRotColor2(matrixData.BoneMatrix);
                 _bakedBoneTexture[textureIndex].SetPixels(pixelx, pixely, _textureBlockWidth, _textureBlockHeight, colors);
                 pixelx += _textureBlockWidth;
 

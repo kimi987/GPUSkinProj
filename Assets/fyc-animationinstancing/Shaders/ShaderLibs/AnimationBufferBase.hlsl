@@ -25,42 +25,24 @@ StructuredBuffer<DrawFrameData> _OutDrawFrameData;
 
 float4x4 LoadMatFromTexture(uint frameIndex, uint boneIndex)
 {
-    float rcpBoneTextureBlockWidth = rcp(_BoneTextureBlockWidth);
+    uint iBlockWidth  = (uint)_BoneTextureBlockWidth;
+    uint iBlockHeight = (uint)_BoneTextureBlockHeight;
+    uint iTexWidth    = (uint)_BoneTextureWidth;
 
-    uint blockCount = _BoneTextureWidth * rcpBoneTextureBlockWidth;
+    uint blockCount = iTexWidth / max(iBlockWidth, 1u);
 
     int2 uv;
-    uv.y = frameIndex / blockCount * _BoneTextureBlockHeight;
-    uv.x = _BoneTextureBlockWidth * (frameIndex - _BoneTextureWidth * rcpBoneTextureBlockWidth * uv.y);
+    uint blockRow = frameIndex / max(blockCount, 1u);
+    uv.y = blockRow * iBlockHeight + boneIndex;
+    uv.x = iBlockWidth * (frameIndex - blockCount * blockRow);
 
-    int matCount_x = _BoneTextureBlockWidth;// * 0.25;
-    int matCount_y = rcpBoneTextureBlockWidth;// * 4;
-    uv.x = uv.x + (boneIndex % matCount_x);// * 4;
-    uv.y = uv.y + boneIndex / matCount_y;
+    // RGBAHalf: 2 pixels per bone
+    // pixel1: pos.xyz, scale
+    // pixel2: rot.xyzw
+    float4 c1 = LOAD_TEXTURE2D_LOD(_BoneTexture, uv, 0);
+    float4 c2 = LOAD_TEXTURE2D_LOD(_BoneTexture, int2(uv.x + 1, uv.y), 0);
 
-    float offset = rcp((float)_BoneTextureWidth);
-    float2 uvFrame;
-    uvFrame.x = uv.x * offset;
-    uvFrame.y = uv.y * rcp((float)_BoneTextureHeight);
-    float4 uvf = float4(uvFrame, 0, 0);
-
-    float4 c = SAMPLE_TEXTURE2D_LOD(_BoneTexture, sampler_BoneTexture, uvf.xy, 0);
-    // uvf.x = uvf.x + offset;
-    // real4 c2 = SAMPLE_TEXTURE2D_LOD(_BoneTexture, sampler_BoneTexture, uvf.xy, 0);
-    // uvf.x = uvf.x + offset;
-    // real4 c3 = SAMPLE_TEXTURE2D_LOD(_BoneTexture, sampler_BoneTexture, uvf.xy, 0);
-    // real4 c4 = real4(0, 0, 0, 1);
-    float2 r1 = simpleUnpack16(c.r);  //pos.x, rot.x
-    float2 r2 = simpleUnpack16(c.g);  //pos.y, rot.y
-    float2 r3 = simpleUnpack16(c.b);  //pos.z, rot.z
-    float2 r4 = simpleUnpack16(c.a);  //rot, scale
-
-    // real4x4 m;
-    // m._11_21_31_41 = c1;
-    // m._12_22_32_42 = c2;
-    // m._13_23_33_43 = c3;
-    // m._14_24_34_44 = c4;
-    float4x4 m = ReconstructMatrixScale(float3(r1.x, r2.x, r3.x), float4(r1.y, r2.y, r3.y, r4.x), r4.y);
+    float4x4 m = ReconstructMatrixScale(c1.rgb, c2, c1.a);
     return m;
 }
 

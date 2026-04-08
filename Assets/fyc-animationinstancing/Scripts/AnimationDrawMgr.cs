@@ -90,7 +90,7 @@ namespace Fyc.AnimationInstancing
                 if (isVulkan || isMetal || (!isGLES31 && supportsIndirect))
                     animationDrawType = AnimationDrawType.Buff;
             }
-            Debug.Log("[AnimationInstance] Current Animation Draw Type: " + Enum.GetName(typeof(AnimationDrawType), animationDrawType));
+            Debug.Log("[AnimationInstance] Current Animation Draw Type: " + 123);
             if (needParentSupport)
             {
                 switch (animationDrawType)
@@ -255,7 +255,7 @@ namespace Fyc.AnimationInstancing
                 var data = _drawInstanceData[i];
                 if (data != null)
                 {
-                    // Debug.LogError($"{data.GetName()} active count: {data.GetActiveCount()}");
+                    Debug.LogError($"{data.GetName()} active count: {data.GetActiveCount()}");
                 }
             }
         }
@@ -579,7 +579,6 @@ namespace Fyc.AnimationInstancing
         {
             return Resources.Load<AnimationData>(unitName);
             // var path = $"{_loadPath}/{unitName}.asset";
-            //     
             //
             // var request = AssetManager.LoadAssetDoNotDestroy(path, typeof(AnimationData));
             // if (request.isDone && request.asset is AnimationData)
